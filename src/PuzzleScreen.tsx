@@ -10,18 +10,25 @@ import PuzzleNode from './PuzzleNode';
 import PuzzleNodeHandle from './PuzzleNodeHandle';
 import { countCrossings, generateSolvedGraph, Graph, Node, scrambleGraph } from './puzzle';
 
-const NODE_RADIUS = 14;
-const HANDLE_SIZE = 40;
+const NODE_RADIUS = 9;
+const HANDLE_SIZE = 32;
 const ADVANCE_DELAY_MS = 1000;
 
+const COLORS = {
+  background: '#F3EFFB',
+  board: '#FBF9FF',
+  rope: '#B6ADE0',
+  ropeSolved: '#8FD4B8',
+  node: '#F3A6B2',
+  nodeSolved: '#8FD4B8',
+  title: '#5B5178',
+  subtitle: '#9A93B8',
+  subtitleSolved: '#4FA383',
+};
+
 function buildPuzzle(boardSize: number, level: number): Graph {
-  const { nodeCount, edgeCount } = getDifficultyForLevel(level);
-  const solved = generateSolvedGraph(
-    nodeCount,
-    edgeCount,
-    { x: boardSize / 2, y: boardSize / 2 },
-    boardSize / 2 - 30
-  );
+  const { nodeCount } = getDifficultyForLevel(level);
+  const solved = generateSolvedGraph(nodeCount, { x: boardSize / 2, y: boardSize / 2 }, boardSize / 2 - 30);
   return scrambleGraph(solved, boardSize, boardSize, 30);
 }
 
@@ -87,7 +94,7 @@ export default function PuzzleScreen() {
               toId={edge.b}
               positions={positions}
               pulse={pulse}
-              color={solved ? '#4ade80' : '#8888ff'}
+              color={solved ? COLORS.ropeSolved : COLORS.rope}
             />
           ))}
           {graph.nodes.map((node) => (
@@ -95,7 +102,7 @@ export default function PuzzleScreen() {
               key={node.id}
               id={node.id}
               radius={NODE_RADIUS}
-              fill={solved ? '#4ade80' : '#ffffff'}
+              fill={solved ? COLORS.nodeSolved : COLORS.node}
               positions={positions}
               pulse={pulse}
             />
@@ -118,30 +125,30 @@ export default function PuzzleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111122',
+    backgroundColor: COLORS.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    color: '#ffffff',
+    color: COLORS.title,
     fontSize: 24,
     fontWeight: '600',
     marginBottom: 4,
   },
   subtitle: {
-    color: '#aaaacc',
+    color: COLORS.subtitle,
     fontSize: 14,
     marginBottom: 16,
   },
   subtitleSolved: {
-    color: '#4ade80',
+    color: COLORS.subtitleSolved,
     fontWeight: '600',
   },
   boardWrapper: {
     position: 'relative',
   },
   board: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 12,
+    backgroundColor: COLORS.board,
+    borderRadius: 16,
   },
 });
