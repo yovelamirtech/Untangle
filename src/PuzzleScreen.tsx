@@ -18,12 +18,13 @@ import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
 
-const NODE_RADIUS = 6;
-const HIT_RADIUS_SCREEN = 36;
+const NODE_RADIUS = 8;
+const HIT_RADIUS_SCREEN = 50;
 const ADVANCE_DELAY_MS = 1000;
 const CANVAS_MARGIN = 60;
 const FIT_PADDING = 0.92;
 const DRAG_THROTTLE_UPDATES = 3;
+const DRAG_BOUNDS_PADDING = 24;
 
 const COLORS = {
   background: '#2B2140',
@@ -43,7 +44,7 @@ interface NodeValue {
 
 /** The rope spreads over a canvas much larger than the screen — more so for longer ropes. */
 function getCanvasSize(nodeCount: number, viewportMax: number): number {
-  return viewportMax * (1.5 + nodeCount / 40);
+  return viewportMax * (2 + nodeCount / 25);
 }
 
 function getFitScale(canvasSize: number, viewportMin: number): number {
@@ -212,9 +213,13 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
       if (draggedNodeId.value !== -1) {
         const node = nodeValues.find((n) => n.id === draggedNodeId.value);
         if (node) {
+          const rawX = node.sv.value.x + dxScreen / scale.value;
+          const rawY = node.sv.value.y + dyScreen / scale.value;
+          // Keep dragged nodes within the canvas — otherwise they can be
+          // dragged past its edge and vanish (clipped by the SVG bounds).
           node.sv.value = {
-            x: node.sv.value.x + dxScreen / scale.value,
-            y: node.sv.value.y + dyScreen / scale.value,
+            x: Math.min(Math.max(rawX, DRAG_BOUNDS_PADDING), canvasSize - DRAG_BOUNDS_PADDING),
+            y: Math.min(Math.max(rawY, DRAG_BOUNDS_PADDING), canvasSize - DRAG_BOUNDS_PADDING),
           };
         }
         dragUpdateCount.value += 1;
@@ -239,6 +244,11 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
       pinchFocalCanvasY.value = (event.focalY - translateY.value) / scale.value;
     })
     .onUpdate((event) => {
+      // The focal point can briefly become unreliable right as a finger
+      // lifts (pointer count dropping from 2), which would otherwise show
+      // up as the camera jumping toward whichever finger is left. Only
+      // trust it while exactly 2 fingers are actually down.
+      if (event.numberOfPointers !== 2) return;
       const nextScale = Math.min(Math.max(savedScale.value * event.scale, minScale), maxScale);
       scale.value = nextScale;
       translateX.value = event.focalX - pinchFocalCanvasX.value * nextScale;
