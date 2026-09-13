@@ -1,9 +1,11 @@
 import * as Haptics from 'expo-haptics';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  makeMutable,
   runOnJS,
+  SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
@@ -14,24 +16,30 @@ import Svg from 'react-native-svg';
 import { getDifficultyForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { countCrossings, generateSolvedGraph, Graph, Node, scrambleGraphAtLeast } from './puzzle';
+import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
 
 const NODE_RADIUS = 6;
-const HIT_RADIUS_SCREEN = 28;
+const HIT_RADIUS_SCREEN = 36;
 const ADVANCE_DELAY_MS = 1000;
 const CANVAS_MARGIN = 60;
 const FIT_PADDING = 0.92;
+const DRAG_THROTTLE_UPDATES = 3;
 
 const COLORS = {
-  background: '#EDE6FB',
+  background: '#2B2140',
   rope: '#B8A9E8',
   ropeSolved: '#7FD9B9',
   node: '#F6A8B8',
   nodeSolved: '#7FD9B9',
-  subtitle: '#948AB3',
-  subtitleSolved: '#3F9B79',
-  overlayBg: 'rgba(255,255,255,0.6)',
+  subtitle: '#E4DBFA',
+  subtitleSolved: '#8FE9C9',
+  overlayBg: 'rgba(0,0,0,0.35)',
 };
+
+interface NodeValue {
+  id: number;
+  sv: SharedValue<{ x: number; y: number }>;
+}
 
 /** The rope spreads over a canvas much larger than the screen — more so for longer ropes. */
 function getCanvasSize(nodeCount: number, viewportMax: number): number {
@@ -82,25 +90,34 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
   const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, 1));
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
 
-  const positions = useSharedValue<Node[]>(graph.nodes);
+  // Each node gets its own independent shared value: moving one node (or
+  // zooming, which reads a separate settledScale) only invalidates the
+  // handful of SVG elements that actually depend on it, instead of every
+  // node/edge in the whole rope re-evaluating on every frame.
+  const nodeValues = useMemo<NodeValue[]>(
+    () => graph.nodes.map((n) => ({ id: n.id, sv: makeMutable({ x: n.x, y: n.y }) })),
+    [graph]
+  );
+  const nodeValueById = useCallback((id: number) => nodeValues.find((n) => n.id === id)!.sv, [nodeValues]);
+
   const pulse = useSharedValue(0);
   const crossingsRef = useRef(crossings);
   const graphRef = useRef(graph);
 
   const initialCamera = getFitCamera(canvasSize, width, height);
   const scale = useSharedValue(initialCamera.scale);
+  const settledScale = useSharedValue(initialCamera.scale);
   const savedScale = useSharedValue(initialCamera.scale);
   const translateX = useSharedValue(initialCamera.translateX);
-  const savedTranslateX = useSharedValue(initialCamera.translateX);
   const translateY = useSharedValue(initialCamera.translateY);
-  const savedTranslateY = useSharedValue(initialCamera.translateY);
   const minScale = initialCamera.scale * 0.4;
   const maxScale = initialCamera.scale * 5;
 
   // -1 while panning the camera; a node id while dragging that node.
   const draggedNodeId = useSharedValue(-1);
-  const nodeStartX = useSharedValue(0);
-  const nodeStartY = useSharedValue(0);
+  const lastX = useSharedValue(0);
+  const lastY = useSharedValue(0);
+  const dragUpdateCount = useSharedValue(0);
   const pinchFocalCanvasX = useSharedValue(0);
   const pinchFocalCanvasY = useSharedValue(0);
 
@@ -110,9 +127,8 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     translateX.value = withTiming(target.translateX);
     translateY.value = withTiming(target.translateY);
     savedScale.value = target.scale;
-    savedTranslateX.value = target.translateX;
-    savedTranslateY.value = target.translateY;
-  }, [canvasSize, width, height, scale, savedScale, translateX, savedTranslateX, translateY, savedTranslateY]);
+    settledScale.value = target.scale;
+  }, [canvasSize, width, height, scale, savedScale, settledScale, translateX, translateY]);
 
   const advanceLevel = useCallback(() => {
     if (crossingsRef.current !== 0) return;
@@ -126,7 +142,6 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     setCanvasSize(nextCanvasSize);
     setGraph(nextGraph);
     graphRef.current = nextGraph;
-    positions.value = nextGraph.nodes;
     const nextCrossings = countCrossings(nextGraph);
     setCrossings(nextCrossings);
     crossingsRef.current = nextCrossings;
@@ -134,27 +149,14 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
 
     scale.value = nextCamera.scale;
     savedScale.value = nextCamera.scale;
+    settledScale.value = nextCamera.scale;
     translateX.value = nextCamera.translateX;
-    savedTranslateX.value = nextCamera.translateX;
     translateY.value = nextCamera.translateY;
-    savedTranslateY.value = nextCamera.translateY;
-  }, [
-    level,
-    viewportMax,
-    width,
-    height,
-    positions,
-    pulse,
-    scale,
-    savedScale,
-    translateX,
-    savedTranslateX,
-    translateY,
-    savedTranslateY,
-  ]);
+  }, [level, viewportMax, width, height, pulse, scale, savedScale, settledScale, translateX, translateY]);
 
-  const handleDrag = useCallback(() => {
-    const newCrossings = countCrossings({ nodes: positions.value, edges: graphRef.current.edges });
+  const recomputeCrossings = useCallback(() => {
+    const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.sv.value.x, y: n.sv.value.y }));
+    const newCrossings = countCrossings({ nodes: currentNodes, edges: graphRef.current.edges });
     const wasSolved = crossingsRef.current === 0;
     crossingsRef.current = newCrossings;
     setCrossings(newCrossings);
@@ -169,53 +171,64 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
       );
       setTimeout(advanceLevel, ADVANCE_DELAY_MS);
     }
-  }, [advanceLevel, positions, pulse]);
+  }, [advanceLevel, nodeValues, pulse]);
 
   // A single gesture handles both node-dragging and camera-panning: it hit-
   // tests against every node in canvas space when the touch starts, so
-  // there's no ambiguity between nested/sibling gesture recognizers.
+  // there's no ambiguity between nested/sibling gesture recognizers. It
+  // tracks its own frame-to-frame screen delta (rather than relying on the
+  // gesture's accumulated translation) so handing off between pinch and pan
+  // as fingers lift doesn't cause a jump.
   const dragOrPanGesture = Gesture.Pan()
     .maxPointers(1)
     .onStart((event) => {
+      lastX.value = event.absoluteX;
+      lastY.value = event.absoluteY;
+      dragUpdateCount.value = 0;
+
       const canvasX = (event.absoluteX - translateX.value) / scale.value;
       const canvasY = (event.absoluteY - translateY.value) / scale.value;
       const hitRadius = HIT_RADIUS_SCREEN / scale.value;
 
       let closestId = -1;
       let closestDistSq = hitRadius * hitRadius;
-      for (const node of positions.value) {
-        const dx = node.x - canvasX;
-        const dy = node.y - canvasY;
+      for (const node of nodeValues) {
+        const dx = node.sv.value.x - canvasX;
+        const dy = node.sv.value.y - canvasY;
         const distSq = dx * dx + dy * dy;
         if (distSq <= closestDistSq) {
           closestDistSq = distSq;
           closestId = node.id;
         }
       }
-
       draggedNodeId.value = closestId;
-      if (closestId !== -1) {
-        const node = positions.value.find((p) => p.id === closestId)!;
-        nodeStartX.value = node.x;
-        nodeStartY.value = node.y;
-      }
     })
     .onUpdate((event) => {
+      const dxScreen = event.absoluteX - lastX.value;
+      const dyScreen = event.absoluteY - lastY.value;
+      lastX.value = event.absoluteX;
+      lastY.value = event.absoluteY;
+
       if (draggedNodeId.value !== -1) {
-        const id = draggedNodeId.value;
-        const newX = nodeStartX.value + event.translationX / scale.value;
-        const newY = nodeStartY.value + event.translationY / scale.value;
-        positions.value = positions.value.map((p) => (p.id === id ? { id, x: newX, y: newY } : p));
-        runOnJS(handleDrag)();
+        const node = nodeValues.find((n) => n.id === draggedNodeId.value);
+        if (node) {
+          node.sv.value = {
+            x: node.sv.value.x + dxScreen / scale.value,
+            y: node.sv.value.y + dyScreen / scale.value,
+          };
+        }
+        dragUpdateCount.value += 1;
+        if (dragUpdateCount.value % DRAG_THROTTLE_UPDATES === 0) {
+          runOnJS(recomputeCrossings)();
+        }
       } else {
-        translateX.value = savedTranslateX.value + event.translationX;
-        translateY.value = savedTranslateY.value + event.translationY;
+        translateX.value += dxScreen;
+        translateY.value += dyScreen;
       }
     })
     .onEnd(() => {
-      if (draggedNodeId.value === -1) {
-        savedTranslateX.value = translateX.value;
-        savedTranslateY.value = translateY.value;
+      if (draggedNodeId.value !== -1) {
+        runOnJS(recomputeCrossings)();
       }
       draggedNodeId.value = -1;
     });
@@ -233,8 +246,7 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     })
     .onEnd(() => {
       savedScale.value = scale.value;
-      savedTranslateX.value = translateX.value;
-      savedTranslateY.value = translateY.value;
+      settledScale.value = scale.value;
     });
 
   const cameraGesture = Gesture.Simultaneous(dragOrPanGesture, pinchGesture);
@@ -256,23 +268,21 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
               {graph.edges.map((edge, i) => (
                 <PuzzleEdge
                   key={i}
-                  fromId={edge.a}
-                  toId={edge.b}
-                  positions={positions}
+                  fromValue={nodeValueById(edge.a)}
+                  toValue={nodeValueById(edge.b)}
                   pulse={pulse}
-                  cameraScale={scale}
+                  settledScale={settledScale}
                   color={solved ? COLORS.ropeSolved : COLORS.rope}
                 />
               ))}
               {graph.nodes.map((node) => (
                 <PuzzleNode
                   key={node.id}
-                  id={node.id}
                   radius={NODE_RADIUS}
                   fill={solved ? COLORS.nodeSolved : COLORS.node}
-                  positions={positions}
+                  nodeValue={nodeValueById(node.id)}
                   pulse={pulse}
-                  cameraScale={scale}
+                  settledScale={settledScale}
                 />
               ))}
             </Svg>
