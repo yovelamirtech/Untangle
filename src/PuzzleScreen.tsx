@@ -1,18 +1,23 @@
 import * as Haptics from 'expo-haptics';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import Svg from 'react-native-svg';
 
 import { getDifficultyForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import PuzzleNodeHandle from './PuzzleNodeHandle';
 import { countCrossings, generateSolvedGraph, Graph, Node, scrambleGraphAtLeast } from './puzzle';
 
 const NODE_RADIUS = 6;
-const HANDLE_SIZE = 32;
+const HIT_RADIUS_SCREEN = 28;
 const ADVANCE_DELAY_MS = 1000;
 const CANVAS_MARGIN = 60;
 const FIT_PADDING = 0.92;
@@ -35,6 +40,15 @@ function getCanvasSize(nodeCount: number, viewportMax: number): number {
 
 function getFitScale(canvasSize: number, viewportMin: number): number {
   return (viewportMin / canvasSize) * FIT_PADDING;
+}
+
+function getFitCamera(canvasSize: number, width: number, height: number) {
+  const fitScale = getFitScale(canvasSize, Math.min(width, height));
+  return {
+    scale: fitScale,
+    translateX: (width - canvasSize * fitScale) / 2,
+    translateY: (height - canvasSize * fitScale) / 2,
+  };
 }
 
 function buildPuzzle(canvasSize: number, level: number): Graph {
@@ -60,7 +74,6 @@ export default function PuzzleScreen() {
 
 function PuzzleGame({ width, height }: { width: number; height: number }) {
   const viewportMax = Math.max(width, height);
-  const viewportMin = Math.min(width, height);
 
   const [level, setLevel] = useState(1);
   const [canvasSize, setCanvasSize] = useState(() =>
@@ -74,25 +87,32 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
   const crossingsRef = useRef(crossings);
   const graphRef = useRef(graph);
 
-  const fitScale = useMemo(() => getFitScale(canvasSize, viewportMin), [canvasSize, viewportMin]);
-  const minScale = fitScale * 0.4;
-  const maxScale = fitScale * 5;
+  const initialCamera = getFitCamera(canvasSize, width, height);
+  const scale = useSharedValue(initialCamera.scale);
+  const savedScale = useSharedValue(initialCamera.scale);
+  const translateX = useSharedValue(initialCamera.translateX);
+  const savedTranslateX = useSharedValue(initialCamera.translateX);
+  const translateY = useSharedValue(initialCamera.translateY);
+  const savedTranslateY = useSharedValue(initialCamera.translateY);
+  const minScale = initialCamera.scale * 0.4;
+  const maxScale = initialCamera.scale * 5;
 
-  const scale = useSharedValue(fitScale);
-  const savedScale = useSharedValue(fitScale);
-  const translateX = useSharedValue(0);
-  const savedTranslateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const savedTranslateY = useSharedValue(0);
+  // -1 while panning the camera; a node id while dragging that node.
+  const draggedNodeId = useSharedValue(-1);
+  const nodeStartX = useSharedValue(0);
+  const nodeStartY = useSharedValue(0);
+  const pinchFocalCanvasX = useSharedValue(0);
+  const pinchFocalCanvasY = useSharedValue(0);
 
   const resetCamera = useCallback(() => {
-    scale.value = withTiming(fitScale);
-    translateX.value = withTiming(0);
-    translateY.value = withTiming(0);
-    savedScale.value = fitScale;
-    savedTranslateX.value = 0;
-    savedTranslateY.value = 0;
-  }, [fitScale, scale, savedScale, translateX, savedTranslateX, translateY, savedTranslateY]);
+    const target = getFitCamera(canvasSize, width, height);
+    scale.value = withTiming(target.scale);
+    translateX.value = withTiming(target.translateX);
+    translateY.value = withTiming(target.translateY);
+    savedScale.value = target.scale;
+    savedTranslateX.value = target.translateX;
+    savedTranslateY.value = target.translateY;
+  }, [canvasSize, width, height, scale, savedScale, translateX, savedTranslateX, translateY, savedTranslateY]);
 
   const advanceLevel = useCallback(() => {
     if (crossingsRef.current !== 0) return;
@@ -100,7 +120,7 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     const nextNodeCount = getDifficultyForLevel(nextLevel).nodeCount;
     const nextCanvasSize = getCanvasSize(nextNodeCount, viewportMax);
     const nextGraph = buildPuzzle(nextCanvasSize, nextLevel);
-    const nextFitScale = getFitScale(nextCanvasSize, viewportMin);
+    const nextCamera = getFitCamera(nextCanvasSize, width, height);
 
     setLevel(nextLevel);
     setCanvasSize(nextCanvasSize);
@@ -112,16 +132,17 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     crossingsRef.current = nextCrossings;
     pulse.value = 0;
 
-    scale.value = nextFitScale;
-    savedScale.value = nextFitScale;
-    translateX.value = 0;
-    savedTranslateX.value = 0;
-    translateY.value = 0;
-    savedTranslateY.value = 0;
+    scale.value = nextCamera.scale;
+    savedScale.value = nextCamera.scale;
+    translateX.value = nextCamera.translateX;
+    savedTranslateX.value = nextCamera.translateX;
+    translateY.value = nextCamera.translateY;
+    savedTranslateY.value = nextCamera.translateY;
   }, [
     level,
     viewportMax,
-    viewportMin,
+    width,
+    height,
     positions,
     pulse,
     scale,
@@ -150,26 +171,73 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     }
   }, [advanceLevel, positions, pulse]);
 
-  const panGesture = Gesture.Pan()
+  // A single gesture handles both node-dragging and camera-panning: it hit-
+  // tests against every node in canvas space when the touch starts, so
+  // there's no ambiguity between nested/sibling gesture recognizers.
+  const dragOrPanGesture = Gesture.Pan()
+    .maxPointers(1)
+    .onStart((event) => {
+      const canvasX = (event.absoluteX - translateX.value) / scale.value;
+      const canvasY = (event.absoluteY - translateY.value) / scale.value;
+      const hitRadius = HIT_RADIUS_SCREEN / scale.value;
+
+      let closestId = -1;
+      let closestDistSq = hitRadius * hitRadius;
+      for (const node of positions.value) {
+        const dx = node.x - canvasX;
+        const dy = node.y - canvasY;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= closestDistSq) {
+          closestDistSq = distSq;
+          closestId = node.id;
+        }
+      }
+
+      draggedNodeId.value = closestId;
+      if (closestId !== -1) {
+        const node = positions.value.find((p) => p.id === closestId)!;
+        nodeStartX.value = node.x;
+        nodeStartY.value = node.y;
+      }
+    })
     .onUpdate((event) => {
-      translateX.value = savedTranslateX.value + event.translationX;
-      translateY.value = savedTranslateY.value + event.translationY;
+      if (draggedNodeId.value !== -1) {
+        const id = draggedNodeId.value;
+        const newX = nodeStartX.value + event.translationX / scale.value;
+        const newY = nodeStartY.value + event.translationY / scale.value;
+        positions.value = positions.value.map((p) => (p.id === id ? { id, x: newX, y: newY } : p));
+        runOnJS(handleDrag)();
+      } else {
+        translateX.value = savedTranslateX.value + event.translationX;
+        translateY.value = savedTranslateY.value + event.translationY;
+      }
     })
     .onEnd(() => {
+      if (draggedNodeId.value === -1) {
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      }
+      draggedNodeId.value = -1;
+    });
+
+  const pinchGesture = Gesture.Pinch()
+    .onStart((event) => {
+      pinchFocalCanvasX.value = (event.focalX - translateX.value) / scale.value;
+      pinchFocalCanvasY.value = (event.focalY - translateY.value) / scale.value;
+    })
+    .onUpdate((event) => {
+      const nextScale = Math.min(Math.max(savedScale.value * event.scale, minScale), maxScale);
+      scale.value = nextScale;
+      translateX.value = event.focalX - pinchFocalCanvasX.value * nextScale;
+      translateY.value = event.focalY - pinchFocalCanvasY.value * nextScale;
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
       savedTranslateX.value = translateX.value;
       savedTranslateY.value = translateY.value;
     });
 
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((event) => {
-      const next = savedScale.value * event.scale;
-      scale.value = Math.min(Math.max(next, minScale), maxScale);
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-    });
-
-  const cameraGesture = Gesture.Simultaneous(panGesture, pinchGesture);
+  const cameraGesture = Gesture.Simultaneous(dragOrPanGesture, pinchGesture);
 
   const canvasStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
@@ -180,57 +248,39 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
   return (
     <View style={styles.container}>
       <GestureDetector gesture={cameraGesture}>
-        <Animated.View style={StyleSheet.absoluteFill} />
+        <Animated.View style={StyleSheet.absoluteFill}>
+          <Animated.View
+            style={[styles.canvas, { width: canvasSize, height: canvasSize }, canvasStyle]}
+          >
+            <Svg width={canvasSize} height={canvasSize} style={StyleSheet.absoluteFill}>
+              {graph.edges.map((edge, i) => (
+                <PuzzleEdge
+                  key={i}
+                  fromId={edge.a}
+                  toId={edge.b}
+                  positions={positions}
+                  pulse={pulse}
+                  cameraScale={scale}
+                  color={solved ? COLORS.ropeSolved : COLORS.rope}
+                />
+              ))}
+              {graph.nodes.map((node) => (
+                <PuzzleNode
+                  key={node.id}
+                  id={node.id}
+                  radius={NODE_RADIUS}
+                  fill={solved ? COLORS.nodeSolved : COLORS.node}
+                  positions={positions}
+                  pulse={pulse}
+                  cameraScale={scale}
+                />
+              ))}
+            </Svg>
+          </Animated.View>
+        </Animated.View>
       </GestureDetector>
 
-      <Animated.View
-        pointerEvents="box-none"
-        style={[
-          styles.canvasWrapper,
-          {
-            width: canvasSize,
-            height: canvasSize,
-            left: (width - canvasSize) / 2,
-            top: (height - canvasSize) / 2,
-          },
-          canvasStyle,
-        ]}
-      >
-        <Svg width={canvasSize} height={canvasSize} style={StyleSheet.absoluteFill}>
-          {graph.edges.map((edge, i) => (
-            <PuzzleEdge
-              key={i}
-              fromId={edge.a}
-              toId={edge.b}
-              positions={positions}
-              pulse={pulse}
-              color={solved ? COLORS.ropeSolved : COLORS.rope}
-            />
-          ))}
-          {graph.nodes.map((node) => (
-            <PuzzleNode
-              key={node.id}
-              id={node.id}
-              radius={NODE_RADIUS}
-              fill={solved ? COLORS.nodeSolved : COLORS.node}
-              positions={positions}
-              pulse={pulse}
-            />
-          ))}
-        </Svg>
-        {graph.nodes.map((node) => (
-          <PuzzleNodeHandle
-            key={node.id}
-            id={node.id}
-            size={HANDLE_SIZE}
-            positions={positions}
-            cameraScale={scale}
-            onDrag={handleDrag}
-          />
-        ))}
-      </Animated.View>
-
-      <View style={styles.overlay} pointerEvents="box-none">
+      <View style={styles.overlay}>
         <Text style={[styles.subtitle, solved && styles.subtitleSolved]}>
           {solved ? 'Solved!' : `${crossings} crossing${crossings === 1 ? '' : 's'}`}
         </Text>
@@ -248,14 +298,18 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     overflow: 'hidden',
   },
-  canvasWrapper: {
+  canvas: {
     position: 'absolute',
+    left: 0,
+    top: 0,
+    transformOrigin: '0 0',
   },
   overlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    pointerEvents: 'box-none',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
