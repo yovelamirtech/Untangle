@@ -7,12 +7,13 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 interface Props {
   radius: number;
   fill: string;
-  nodeValue: SharedValue<{ x: number; y: number }>;
+  nodeX: SharedValue<number>;
+  nodeY: SharedValue<number>;
   pulse: SharedValue<number>;
   settledScale: SharedValue<number>;
 }
 
-function PuzzleNode({ radius, fill, nodeValue, pulse, settledScale }: Props) {
+function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, settledScale }: Props) {
   const animatedProps = useAnimatedProps(() => {
     // Keep dots readable at any zoom level: grow their canvas-space radius
     // as the camera zooms out, capped so they don't balloon at extreme
@@ -21,7 +22,7 @@ function PuzzleNode({ radius, fill, nodeValue, pulse, settledScale }: Props) {
     // to recompute every frame.
     const desiredCanvasRadius = 7 / settledScale.value;
     const screenRadius = Math.min(Math.max(radius, desiredCanvasRadius), radius * 4);
-    return { cx: nodeValue.value.x, cy: nodeValue.value.y, r: screenRadius + pulse.value * 4 };
+    return { cx: nodeX.value, cy: nodeY.value, r: screenRadius + pulse.value * 4 };
   });
 
   return <AnimatedCircle animatedProps={animatedProps} fill={fill} />;

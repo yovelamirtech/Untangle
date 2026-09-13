@@ -11,7 +11,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg from 'react-native-svg';
+import Svg, { Rect } from 'react-native-svg';
 
 import { getDifficultyForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
@@ -35,16 +35,18 @@ const COLORS = {
   subtitle: '#E4DBFA',
   subtitleSolved: '#8FE9C9',
   overlayBg: 'rgba(0,0,0,0.35)',
+  border: 'rgba(184,169,232,0.5)',
 };
 
 interface NodeValue {
   id: number;
-  sv: SharedValue<{ x: number; y: number }>;
+  x: SharedValue<number>;
+  y: SharedValue<number>;
 }
 
 /** The rope spreads over a canvas much larger than the screen — more so for longer ropes. */
 function getCanvasSize(nodeCount: number, viewportMax: number): number {
-  return viewportMax * (2 + nodeCount / 25);
+  return viewportMax * (2.5 + nodeCount / 20);
 }
 
 function getFitScale(canvasSize: number, viewportMin: number): number {
@@ -91,15 +93,17 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
   const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, 1));
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
 
-  // Each node gets its own independent shared value: moving one node (or
-  // zooming, which reads a separate settledScale) only invalidates the
-  // handful of SVG elements that actually depend on it, instead of every
-  // node/edge in the whole rope re-evaluating on every frame.
+  // Each node gets its own independent x/y shared values (plain numbers,
+  // which Reanimated updates more cheaply than object-valued shared
+  // values): moving one node (or zooming, which reads a separate
+  // settledScale) only invalidates the handful of SVG elements that
+  // actually depend on it, instead of every node/edge in the whole rope
+  // re-evaluating on every frame.
   const nodeValues = useMemo<NodeValue[]>(
-    () => graph.nodes.map((n) => ({ id: n.id, sv: makeMutable({ x: n.x, y: n.y }) })),
+    () => graph.nodes.map((n) => ({ id: n.id, x: makeMutable(n.x), y: makeMutable(n.y) })),
     [graph]
   );
-  const nodeValueById = useCallback((id: number) => nodeValues.find((n) => n.id === id)!.sv, [nodeValues]);
+  const nodeValueById = useCallback((id: number) => nodeValues.find((n) => n.id === id)!, [nodeValues]);
 
   const pulse = useSharedValue(0);
   const crossingsRef = useRef(crossings);
@@ -156,7 +160,7 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
   }, [level, viewportMax, width, height, pulse, scale, savedScale, settledScale, translateX, translateY]);
 
   const recomputeCrossings = useCallback(() => {
-    const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.sv.value.x, y: n.sv.value.y }));
+    const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
     const newCrossings = countCrossings({ nodes: currentNodes, edges: graphRef.current.edges });
     const wasSolved = crossingsRef.current === 0;
     crossingsRef.current = newCrossings;
@@ -194,8 +198,8 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
       let closestId = -1;
       let closestDistSq = hitRadius * hitRadius;
       for (const node of nodeValues) {
-        const dx = node.sv.value.x - canvasX;
-        const dy = node.sv.value.y - canvasY;
+        const dx = node.x.value - canvasX;
+        const dy = node.y.value - canvasY;
         const distSq = dx * dx + dy * dy;
         if (distSq <= closestDistSq) {
           closestDistSq = distSq;
@@ -213,14 +217,12 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
       if (draggedNodeId.value !== -1) {
         const node = nodeValues.find((n) => n.id === draggedNodeId.value);
         if (node) {
-          const rawX = node.sv.value.x + dxScreen / scale.value;
-          const rawY = node.sv.value.y + dyScreen / scale.value;
+          const rawX = node.x.value + dxScreen / scale.value;
+          const rawY = node.y.value + dyScreen / scale.value;
           // Keep dragged nodes within the canvas — otherwise they can be
           // dragged past its edge and vanish (clipped by the SVG bounds).
-          node.sv.value = {
-            x: Math.min(Math.max(rawX, DRAG_BOUNDS_PADDING), canvasSize - DRAG_BOUNDS_PADDING),
-            y: Math.min(Math.max(rawY, DRAG_BOUNDS_PADDING), canvasSize - DRAG_BOUNDS_PADDING),
-          };
+          node.x.value = Math.min(Math.max(rawX, DRAG_BOUNDS_PADDING), canvasSize - DRAG_BOUNDS_PADDING);
+          node.y.value = Math.min(Math.max(rawY, DRAG_BOUNDS_PADDING), canvasSize - DRAG_BOUNDS_PADDING);
         }
         dragUpdateCount.value += 1;
         if (dragUpdateCount.value % DRAG_THROTTLE_UPDATES === 0) {
@@ -275,26 +277,45 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
             style={[styles.canvas, { width: canvasSize, height: canvasSize }, canvasStyle]}
           >
             <Svg width={canvasSize} height={canvasSize} style={StyleSheet.absoluteFill}>
-              {graph.edges.map((edge, i) => (
-                <PuzzleEdge
-                  key={i}
-                  fromValue={nodeValueById(edge.a)}
-                  toValue={nodeValueById(edge.b)}
-                  pulse={pulse}
-                  settledScale={settledScale}
-                  color={solved ? COLORS.ropeSolved : COLORS.rope}
-                />
-              ))}
-              {graph.nodes.map((node) => (
-                <PuzzleNode
-                  key={node.id}
-                  radius={NODE_RADIUS}
-                  fill={solved ? COLORS.nodeSolved : COLORS.node}
-                  nodeValue={nodeValueById(node.id)}
-                  pulse={pulse}
-                  settledScale={settledScale}
-                />
-              ))}
+              <Rect
+                x={0}
+                y={0}
+                width={canvasSize}
+                height={canvasSize}
+                fill="none"
+                stroke={COLORS.border}
+                strokeWidth={3}
+                vectorEffect="non-scaling-stroke"
+              />
+              {graph.edges.map((edge, i) => {
+                const from = nodeValueById(edge.a);
+                const to = nodeValueById(edge.b);
+                return (
+                  <PuzzleEdge
+                    key={i}
+                    fromX={from.x}
+                    fromY={from.y}
+                    toX={to.x}
+                    toY={to.y}
+                    pulse={pulse}
+                    color={solved ? COLORS.ropeSolved : COLORS.rope}
+                  />
+                );
+              })}
+              {graph.nodes.map((node) => {
+                const nv = nodeValueById(node.id);
+                return (
+                  <PuzzleNode
+                    key={node.id}
+                    radius={NODE_RADIUS}
+                    fill={solved ? COLORS.nodeSolved : COLORS.node}
+                    nodeX={nv.x}
+                    nodeY={nv.y}
+                    pulse={pulse}
+                    settledScale={settledScale}
+                  />
+                );
+              })}
             </Svg>
           </Animated.View>
         </Animated.View>
