@@ -9,15 +9,16 @@ interface Props {
   fromId: number;
   toId: number;
   positions: SharedValue<Node[]>;
+  pulse: SharedValue<number>;
   color: string;
 }
 
-export default function PuzzleEdge({ fromId, toId, positions, color }: Props) {
+export default function PuzzleEdge({ fromId, toId, positions, pulse, color }: Props) {
   const animatedProps = useAnimatedProps(() => {
     const from = positions.value.find((p) => p.id === fromId)!;
     const to = positions.value.find((p) => p.id === toId)!;
-    return { x1: from.x, y1: from.y, x2: to.x, y2: to.y };
+    return { x1: from.x, y1: from.y, x2: to.x, y2: to.y, strokeWidth: 2 + pulse.value * 3 };
   });
 
-  return <AnimatedLine animatedProps={animatedProps} stroke={color} strokeWidth={2} />;
+  return <AnimatedLine animatedProps={animatedProps} stroke={color} />;
 }
