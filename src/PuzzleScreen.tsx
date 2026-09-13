@@ -10,20 +10,20 @@ import PuzzleNode from './PuzzleNode';
 import PuzzleNodeHandle from './PuzzleNodeHandle';
 import { countCrossings, generateSolvedGraph, Graph, Node, scrambleGraph } from './puzzle';
 
-const NODE_RADIUS = 9;
-const HANDLE_SIZE = 32;
+const NODE_RADIUS = 6;
+const HANDLE_SIZE = 24;
 const ADVANCE_DELAY_MS = 1000;
 
 const COLORS = {
-  background: '#F3EFFB',
-  board: '#FBF9FF',
-  rope: '#B6ADE0',
-  ropeSolved: '#8FD4B8',
-  node: '#F3A6B2',
-  nodeSolved: '#8FD4B8',
-  title: '#5B5178',
-  subtitle: '#9A93B8',
-  subtitleSolved: '#4FA383',
+  background: '#EDE6FB',
+  board: '#FDEFE3',
+  rope: '#B8A9E8',
+  ropeSolved: '#7FD9B9',
+  node: '#F6A8B8',
+  nodeSolved: '#7FD9B9',
+  title: '#5B4E7A',
+  subtitle: '#948AB3',
+  subtitleSolved: '#3F9B79',
 };
 
 function buildPuzzle(boardSize: number, level: number): Graph {
