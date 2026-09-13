@@ -2,14 +2,14 @@ export interface DifficultySettings {
   nodeCount: number;
 }
 
-const MIN_NODES = 18;
-const MAX_NODES = 40;
+const MIN_NODES = 30;
+const MAX_NODES = 100;
 const LEVELS_PER_TIER = 3;
-const NODES_PER_TIER = 2;
+const NODES_PER_TIER = 3;
 
 /**
- * Difficulty scaling: every 3 levels, the rope gets two more segments
- * (capped at 40), starting from 18 at level 1.
+ * Difficulty scaling: every 3 levels, the rope gets three more segments
+ * (capped at 100), starting from 30 at level 1.
  */
 export function getDifficultyForLevel(level: number): DifficultySettings {
   const tier = Math.floor((level - 1) / LEVELS_PER_TIER);
