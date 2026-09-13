@@ -7,7 +7,7 @@ This doc is split into 6 phases. Copy one phase at a time into Claude Code, veri
 | Phase | Status |
 |---|---|
 | 1 - Project scaffold | ✅ Done |
-| 2 - Solvable puzzle generation | ⬜ Not started |
+| 2 - Solvable puzzle generation | ✅ Done |
 | 3 - Dragging + solve detection | ⬜ Not started |
 | 4 - Visual & feel polish | ⬜ Not started |
 | 5 - Journey map & progress | ⬜ Not started |
