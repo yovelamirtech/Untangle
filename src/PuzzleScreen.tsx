@@ -1,17 +1,17 @@
+import { Canvas, Group, Rect } from '@shopify/react-native-skia';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
+import {
   makeMutable,
   runOnJS,
   SharedValue,
-  useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Rect } from 'react-native-svg';
 
 import { getDifficultyForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
@@ -93,12 +93,9 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
   const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, 1));
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
 
-  // Each node gets its own independent x/y shared values (plain numbers,
-  // which Reanimated updates more cheaply than object-valued shared
-  // values): moving one node (or zooming, which reads a separate
-  // settledScale) only invalidates the handful of SVG elements that
-  // actually depend on it, instead of every node/edge in the whole rope
-  // re-evaluating on every frame.
+  // Each node gets its own independent x/y shared value, read directly by
+  // its Skia Circle/Line — Skia batches the whole scene into one GPU draw
+  // call, so this stays cheap regardless of how many nodes are on screen.
   const nodeValues = useMemo<NodeValue[]>(
     () => graph.nodes.map((n) => ({ id: n.id, x: makeMutable(n.x), y: makeMutable(n.y) })),
     [graph]
@@ -111,7 +108,6 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
 
   const initialCamera = getFitCamera(canvasSize, width, height);
   const scale = useSharedValue(initialCamera.scale);
-  const settledScale = useSharedValue(initialCamera.scale);
   const savedScale = useSharedValue(initialCamera.scale);
   const translateX = useSharedValue(initialCamera.translateX);
   const translateY = useSharedValue(initialCamera.translateY);
@@ -132,8 +128,7 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     translateX.value = withTiming(target.translateX);
     translateY.value = withTiming(target.translateY);
     savedScale.value = target.scale;
-    settledScale.value = target.scale;
-  }, [canvasSize, width, height, scale, savedScale, settledScale, translateX, translateY]);
+  }, [canvasSize, width, height, scale, savedScale, translateX, translateY]);
 
   const advanceLevel = useCallback(() => {
     if (crossingsRef.current !== 0) return;
@@ -154,10 +149,9 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
 
     scale.value = nextCamera.scale;
     savedScale.value = nextCamera.scale;
-    settledScale.value = nextCamera.scale;
     translateX.value = nextCamera.translateX;
     translateY.value = nextCamera.translateY;
-  }, [level, viewportMax, width, height, pulse, scale, savedScale, settledScale, translateX, translateY]);
+  }, [level, viewportMax, width, height, pulse, scale, savedScale, translateX, translateY]);
 
   const recomputeCrossings = useCallback(() => {
     const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
@@ -258,67 +252,71 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     })
     .onEnd(() => {
       savedScale.value = scale.value;
-      settledScale.value = scale.value;
     });
 
   const cameraGesture = Gesture.Simultaneous(dragOrPanGesture, pinchGesture);
 
-  const canvasStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
-  }));
+  const groupTransform = useDerivedValue(
+    () => [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
+    [translateX, translateY, scale]
+  );
+
+  // A single shared derived value for line thickness, reused by every edge:
+  // stays a constant on-screen width regardless of zoom (computed live,
+  // every frame — cheap under Skia since the whole scene is one draw call).
+  const lineWidth = useDerivedValue(
+    () => Math.min(Math.max(3, 2.2 / scale.value), 15),
+    [scale]
+  );
 
   const solved = crossings === 0;
 
   return (
     <View style={styles.container}>
       <GestureDetector gesture={cameraGesture}>
-        <Animated.View style={StyleSheet.absoluteFill}>
-          <Animated.View
-            style={[styles.canvas, { width: canvasSize, height: canvasSize }, canvasStyle]}
-          >
-            <Svg width={canvasSize} height={canvasSize} style={StyleSheet.absoluteFill}>
-              <Rect
-                x={0}
-                y={0}
-                width={canvasSize}
-                height={canvasSize}
-                fill="none"
-                stroke={COLORS.border}
-                strokeWidth={3}
-                vectorEffect="non-scaling-stroke"
-              />
-              {graph.edges.map((edge, i) => {
-                const from = nodeValueById(edge.a);
-                const to = nodeValueById(edge.b);
-                return (
-                  <PuzzleEdge
-                    key={i}
-                    fromX={from.x}
-                    fromY={from.y}
-                    toX={to.x}
-                    toY={to.y}
-                    pulse={pulse}
-                    color={solved ? COLORS.ropeSolved : COLORS.rope}
-                  />
-                );
-              })}
-              {graph.nodes.map((node) => {
-                const nv = nodeValueById(node.id);
-                return (
-                  <PuzzleNode
-                    key={node.id}
-                    radius={NODE_RADIUS}
-                    fill={solved ? COLORS.nodeSolved : COLORS.node}
-                    nodeX={nv.x}
-                    nodeY={nv.y}
-                    pulse={pulse}
-                    settledScale={settledScale}
-                  />
-                );
-              })}
-            </Svg>
-          </Animated.View>
-        </Animated.View>
+        <Canvas style={StyleSheet.absoluteFill}>
+          <Group transform={groupTransform}>
+            <Rect
+              x={0}
+              y={0}
+              width={canvasSize}
+              height={canvasSize}
+              color={COLORS.border}
+              style="stroke"
+              strokeWidth={3}
+            />
+            {graph.edges.map((edge, i) => {
+              const from = nodeValueById(edge.a);
+              const to = nodeValueById(edge.b);
+              return (
+                <PuzzleEdge
+                  key={i}
+                  fromX={from.x}
+                  fromY={from.y}
+                  toX={to.x}
+                  toY={to.y}
+                  pulse={pulse}
+                  lineWidth={lineWidth}
+                  color={solved ? COLORS.ropeSolved : COLORS.rope}
+                />
+              );
+            })}
+            {graph.nodes.map((node) => {
+              const nv = nodeValueById(node.id);
+              return (
+                <PuzzleNode
+                  key={node.id}
+                  radius={NODE_RADIUS}
+                  fill={solved ? COLORS.nodeSolved : COLORS.node}
+                  nodeX={nv.x}
+                  nodeY={nv.y}
+                  pulse={pulse}
+                  scale={scale}
+                />
+              );
+            })}
+          </Group>
+        </Canvas>
       </GestureDetector>
 
       <View style={styles.overlay}>
@@ -338,12 +336,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
     overflow: 'hidden',
-  },
-  canvas: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    transformOrigin: '0 0',
   },
   overlay: {
     position: 'absolute',
