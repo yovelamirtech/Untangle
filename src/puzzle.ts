@@ -65,6 +65,35 @@ export function scrambleGraph(graph: Graph, width: number, height: number, margi
 }
 
 /**
+ * Scrambles the graph, retrying (up to a cap) only if the result falls
+ * below a minimum crossing count. This cuts off the unlucky "too easy"
+ * outliers a single scramble occasionally produces without forcing the
+ * layout toward a maximally tangled (and frustrating) extreme.
+ */
+export function scrambleGraphAtLeast(
+  graph: Graph,
+  width: number,
+  height: number,
+  margin: number,
+  minCrossings: number,
+  maxAttempts = 8
+): Graph {
+  let best = scrambleGraph(graph, width, height, margin);
+  let bestCrossings = countCrossings(best);
+
+  for (let i = 1; i < maxAttempts && bestCrossings < minCrossings; i++) {
+    const candidate = scrambleGraph(graph, width, height, margin);
+    const crossings = countCrossings(candidate);
+    if (crossings > bestCrossings) {
+      best = candidate;
+      bestCrossings = crossings;
+    }
+  }
+
+  return best;
+}
+
+/**
  * Counts how many pairs of (non-adjacent) edges currently cross.
  */
 export function countCrossings(graph: Graph): number {

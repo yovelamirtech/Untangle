@@ -8,7 +8,7 @@ import { getDifficultyForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import PuzzleNodeHandle from './PuzzleNodeHandle';
-import { countCrossings, generateSolvedGraph, Graph, Node, scrambleGraph } from './puzzle';
+import { countCrossings, generateSolvedGraph, Graph, Node, scrambleGraphAtLeast } from './puzzle';
 
 const NODE_RADIUS = 6;
 const HANDLE_SIZE = 24;
@@ -29,7 +29,8 @@ const COLORS = {
 function buildPuzzle(boardSize: number, level: number): Graph {
   const { nodeCount } = getDifficultyForLevel(level);
   const solved = generateSolvedGraph(nodeCount, { x: boardSize / 2, y: boardSize / 2 }, boardSize / 2 - 30);
-  return scrambleGraph(solved, boardSize, boardSize, 30);
+  const minCrossings = solved.edges.length;
+  return scrambleGraphAtLeast(solved, boardSize, boardSize, 30, minCrossings);
 }
 
 export default function PuzzleScreen() {
