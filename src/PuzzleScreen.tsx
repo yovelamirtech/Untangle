@@ -21,14 +21,12 @@ import PuzzleNode from './PuzzleNode';
 import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
-/** Dev-only quick-jump targets: level 1 plus both sides of every zone boundary. */
-const DEV_QUICK_LEVELS = __DEV__
-  ? ZONES.flatMap((_, i) => {
-      if (i === 0) return [1];
-      const boundary = i * LEVELS_PER_ZONE + 1;
-      return [boundary - 1, boundary];
-    })
-  : [];
+/** Quick-jump targets for the level picker: level 1 plus both sides of every zone boundary. */
+const QUICK_LEVELS = ZONES.flatMap((_, i) => {
+  if (i === 0) return [1];
+  const boundary = i * LEVELS_PER_ZONE + 1;
+  return [boundary - 1, boundary];
+});
 
 const NODE_RADIUS = 8;
 const HIT_RADIUS_SCREEN = 38;
@@ -399,22 +397,19 @@ function PuzzleGame({
           <Pressable style={styles.fitButton} onPress={resetCamera}>
             <Text style={styles.fitButtonText}>Fit</Text>
           </Pressable>
-          {__DEV__ && (
-            <Pressable
-              style={styles.fitButton}
-              onPress={() => {
-                setLevelInput(String(level));
-                setLevelPickerVisible(true);
-              }}
-            >
-              <Text style={styles.fitButtonText}>Lvl {level}</Text>
-            </Pressable>
-          )}
+          <Pressable
+            style={styles.fitButton}
+            onPress={() => {
+              setLevelInput(String(level));
+              setLevelPickerVisible(true);
+            }}
+          >
+            <Text style={styles.fitButtonText}>Lvl {level}</Text>
+          </Pressable>
         </View>
       </View>
 
-      {__DEV__ && (
-        <Modal
+      <Modal
           visible={levelPickerVisible}
           transparent
           animationType="fade"
@@ -437,7 +432,7 @@ function PuzzleGame({
                 }}
               />
               <View style={styles.quickRow}>
-                {DEV_QUICK_LEVELS.map((lvl) => (
+                {QUICK_LEVELS.map((lvl) => (
                   <Pressable
                     key={lvl}
                     style={styles.quickButton}
@@ -463,7 +458,6 @@ function PuzzleGame({
             </Pressable>
           </Pressable>
         </Modal>
-      )}
     </View>
   );
 }
