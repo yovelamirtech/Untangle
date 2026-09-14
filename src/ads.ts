@@ -7,7 +7,7 @@ type AdsModule = typeof GoogleMobileAdsNamespace;
 // native module isn't there — as under Expo Go. Loading it via a runtime
 // `require` inside a try/catch lets that throw be caught, so the game keeps
 // working (just without ads) anywhere the native module isn't linked.
-let adsModule: AdsModule | null = null;
+export let adsModule: AdsModule | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   adsModule = require('react-native-google-mobile-ads');

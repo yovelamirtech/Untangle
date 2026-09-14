@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 
+import AdBanner from './AdBanner';
 import { getZoneIndexForLevel, isWaypointLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
 const ROW_HEIGHT = 60;
@@ -82,7 +83,11 @@ export default function JourneyScreen({ furthestLevel, onClose }: JourneyScreenP
           <Text style={styles.closeButtonText}>Back</Text>
         </Pressable>
       </View>
-      <ScrollView ref={scrollRef} contentContainerStyle={{ width, height: contentHeight }}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={{ width, height: contentHeight }}
+      >
         <Svg width={width} height={contentHeight}>
           {zoneBands.map((band) => (
             <Rect
@@ -158,6 +163,7 @@ export default function JourneyScreen({ furthestLevel, onClose }: JourneyScreenP
           })}
         </Svg>
       </ScrollView>
+      <AdBanner />
     </View>
   );
 }
@@ -166,6 +172,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.screenBg,
+  },
+  scroll: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
