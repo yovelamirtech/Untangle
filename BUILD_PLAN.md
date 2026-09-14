@@ -10,10 +10,16 @@ This doc is split into 6 phases. Copy one phase at a time into Claude Code, veri
 | 2 - Solvable puzzle generation | ✅ Done |
 | 3 - Dragging + solve detection | ✅ Done |
 | 4 - Visual & feel polish | ✅ Done |
-| 5 - Journey map & progress | ⬜ Not started |
-| 6 - Ads | ⬜ Not started |
+| 5 - Journey map & progress | ✅ Done |
+| 6 - Ads | 🔧 Implemented, awaiting test on a dev build (not testable in Expo Go) |
 
 **Before you start work on any phase, read this table to know where the project stands. After finishing a phase, update its row here before you stop.**
+
+---
+
+## Future ideas (not in scope yet)
+
+- **"Many dots, giant space" mode**: a separate game mode with a much longer rope (dozens+ of points) spread over a large pannable/zoomable canvas, built and tested as part of the original post-Phase-4 rendering work but pulled back out of the main progression in favor of short, easy levels there. The pan/zoom camera, Skia rendering, and puzzle-generation code all already support this — it mainly needs its own entry point and difficulty curve reusing `getDifficultyForLevel`-style scaling with a much higher node cap.
 
 ---
 

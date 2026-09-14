@@ -1,6 +1,6 @@
 import { Canvas, Group, Rect } from '@shopify/react-native-skia';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
@@ -13,13 +13,16 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 
-import { getDifficultyForLevel } from './difficulty';
+import { showInterstitialIfReady } from './ads';
+import { getDifficultyForLevel, getMinCrossingsForLevel } from './difficulty';
+import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
+import { getZoneIndexForLevel } from './zones';
 
 const NODE_RADIUS = 8;
-const HIT_RADIUS_SCREEN = 50;
+const HIT_RADIUS_SCREEN = 38;
 const ADVANCE_DELAY_MS = 1000;
 const CANVAS_MARGIN = 60;
 const FIT_PADDING = 0.92;
@@ -27,15 +30,11 @@ const DRAG_THROTTLE_UPDATES = 3;
 const DRAG_BOUNDS_PADDING = 24;
 
 const COLORS = {
-  background: '#2B2140',
-  rope: '#B8A9E8',
   ropeSolved: '#7FD9B9',
-  node: '#F6A8B8',
-  nodeSolved: '#7FD9B9',
-  subtitle: '#E4DBFA',
-  subtitleSolved: '#8FE9C9',
-  overlayBg: 'rgba(0,0,0,0.35)',
-  border: 'rgba(184,169,232,0.5)',
+  nodeSolved: '#4FBFA0',
+  subtitle: '#3A2E4D',
+  subtitleSolved: '#1F5C4A',
+  overlayBg: 'rgba(255,255,255,0.55)',
 };
 
 interface NodeValue {
@@ -44,9 +43,20 @@ interface NodeValue {
   y: SharedValue<number>;
 }
 
-/** The rope spreads over a canvas much larger than the screen — more so for longer ropes. */
+/** The rope spreads over a canvas a bit larger than the screen — more so for longer ropes. */
 function getCanvasSize(nodeCount: number, viewportMax: number): number {
-  return viewportMax * (2.5 + nodeCount / 20);
+  return viewportMax * (1.1 + nodeCount / 50);
+}
+
+/** Clamps a pan/zoom translate so the canvas can never be dragged past its own edge. */
+function clampTranslate(value: number, scale: number, canvasSize: number, viewportLength: number) {
+  'worklet';
+  const contentLength = canvasSize * scale;
+  if (contentLength <= viewportLength) {
+    return (viewportLength - contentLength) / 2;
+  }
+  const min = viewportLength - contentLength;
+  return Math.min(Math.max(value, min), 0);
 }
 
 function getFitScale(canvasSize: number, viewportMin: number): number {
@@ -69,29 +79,53 @@ function buildPuzzle(canvasSize: number, level: number): Graph {
     { x: canvasSize / 2, y: canvasSize / 2 },
     canvasSize / 2 - CANVAS_MARGIN
   );
-  const minCrossings = solved.edges.length;
-  return scrambleGraphAtLeast(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings);
+  const minCrossings = getMinCrossingsForLevel(nodeCount);
+  return scrambleGraphAtLeast(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, 20);
 }
 
-export default function PuzzleScreen() {
+interface PuzzleScreenProps {
+  initialLevel: number;
+  onLevelChange: (level: number) => void;
+  onOpenJourney: () => void;
+}
+
+export default function PuzzleScreen({ initialLevel, onLevelChange, onOpenJourney }: PuzzleScreenProps) {
   const { width, height } = useWindowDimensions();
   // On web, useWindowDimensions can report 0 on the very first render before
   // layout is measured. Since canvas size/graph are seeded once via a
   // useState initializer, mounting the game before real dimensions arrive
   // would freeze it at a size of 0 forever.
   if (!width || !height) return null;
-  return <PuzzleGame width={width} height={height} />;
+  return (
+    <PuzzleGame
+      width={width}
+      height={height}
+      initialLevel={initialLevel}
+      onLevelChange={onLevelChange}
+      onOpenJourney={onOpenJourney}
+    />
+  );
 }
 
-function PuzzleGame({ width, height }: { width: number; height: number }) {
+function PuzzleGame({
+  width,
+  height,
+  initialLevel,
+  onLevelChange,
+  onOpenJourney,
+}: { width: number; height: number } & PuzzleScreenProps) {
   const viewportMax = Math.max(width, height);
 
-  const [level, setLevel] = useState(1);
+  const [level, setLevel] = useState(initialLevel);
   const [canvasSize, setCanvasSize] = useState(() =>
-    getCanvasSize(getDifficultyForLevel(1).nodeCount, viewportMax)
+    getCanvasSize(getDifficultyForLevel(initialLevel).nodeCount, viewportMax)
   );
-  const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, 1));
+  const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, initialLevel));
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
+
+  useEffect(() => {
+    onLevelChange(level);
+  }, [level, onLevelChange]);
 
   // Each node gets its own independent x/y shared value, read directly by
   // its Skia Circle/Line — Skia batches the whole scene into one GPU draw
@@ -151,6 +185,12 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
     savedScale.value = nextCamera.scale;
     translateX.value = nextCamera.translateX;
     translateY.value = nextCamera.translateY;
+
+    // Only between levels, never mid-drag — and only at a zone boundary,
+    // not on every level.
+    if (getZoneIndexForLevel(nextLevel) !== getZoneIndexForLevel(level)) {
+      showInterstitialIfReady();
+    }
   }, [level, viewportMax, width, height, pulse, scale, savedScale, translateX, translateY]);
 
   const recomputeCrossings = useCallback(() => {
@@ -223,8 +263,8 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
           runOnJS(recomputeCrossings)();
         }
       } else {
-        translateX.value += dxScreen;
-        translateY.value += dyScreen;
+        translateX.value = clampTranslate(translateX.value + dxScreen, scale.value, canvasSize, width);
+        translateY.value = clampTranslate(translateY.value + dyScreen, scale.value, canvasSize, height);
       }
     })
     .onEnd(() => {
@@ -247,8 +287,18 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
       if (event.numberOfPointers !== 2) return;
       const nextScale = Math.min(Math.max(savedScale.value * event.scale, minScale), maxScale);
       scale.value = nextScale;
-      translateX.value = event.focalX - pinchFocalCanvasX.value * nextScale;
-      translateY.value = event.focalY - pinchFocalCanvasY.value * nextScale;
+      translateX.value = clampTranslate(
+        event.focalX - pinchFocalCanvasX.value * nextScale,
+        nextScale,
+        canvasSize,
+        width
+      );
+      translateY.value = clampTranslate(
+        event.focalY - pinchFocalCanvasY.value * nextScale,
+        nextScale,
+        canvasSize,
+        height
+      );
     })
     .onEnd(() => {
       savedScale.value = scale.value;
@@ -270,9 +320,10 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
   );
 
   const solved = crossings === 0;
+  const palette = getPaletteForLevel(level);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: palette.background }]}>
       <GestureDetector gesture={cameraGesture}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>
@@ -281,7 +332,7 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
               y={0}
               width={canvasSize}
               height={canvasSize}
-              color={COLORS.border}
+              color={palette.border}
               style="stroke"
               strokeWidth={3}
             />
@@ -297,7 +348,7 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
                   toY={to.y}
                   pulse={pulse}
                   lineWidth={lineWidth}
-                  color={solved ? COLORS.ropeSolved : COLORS.rope}
+                  color={solved ? COLORS.ropeSolved : palette.rope}
                 />
               );
             })}
@@ -307,7 +358,7 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
                 <PuzzleNode
                   key={node.id}
                   radius={NODE_RADIUS}
-                  fill={solved ? COLORS.nodeSolved : COLORS.node}
+                  fill={solved ? COLORS.nodeSolved : palette.node}
                   nodeX={nv.x}
                   nodeY={nv.y}
                   pulse={pulse}
@@ -323,9 +374,14 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
         <Text style={[styles.subtitle, solved && styles.subtitleSolved]}>
           {solved ? 'Solved!' : `${crossings} crossing${crossings === 1 ? '' : 's'}`}
         </Text>
-        <Pressable style={styles.fitButton} onPress={resetCamera}>
-          <Text style={styles.fitButtonText}>Fit</Text>
-        </Pressable>
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.fitButton} onPress={onOpenJourney}>
+            <Text style={styles.fitButtonText}>Journey</Text>
+          </Pressable>
+          <Pressable style={styles.fitButton} onPress={resetCamera}>
+            <Text style={styles.fitButtonText}>Fit</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -334,7 +390,6 @@ function PuzzleGame({ width, height }: { width: number; height: number }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
     overflow: 'hidden',
   },
   overlay: {
@@ -361,6 +416,10 @@ const styles = StyleSheet.create({
   },
   subtitleSolved: {
     color: COLORS.subtitleSolved,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   fitButton: {
     backgroundColor: COLORS.overlayBg,
