@@ -1,7 +1,7 @@
 import { Canvas, Group, Rect } from '@shopify/react-native-skia';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   makeMutable,
@@ -19,7 +19,16 @@ import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
-import { getZoneIndexForLevel } from './zones';
+import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
+
+/** Dev-only quick-jump targets: level 1 plus both sides of every zone boundary. */
+const DEV_QUICK_LEVELS = __DEV__
+  ? ZONES.flatMap((_, i) => {
+      if (i === 0) return [1];
+      const boundary = i * LEVELS_PER_ZONE + 1;
+      return [boundary - 1, boundary];
+    })
+  : [];
 
 const NODE_RADIUS = 8;
 const HIT_RADIUS_SCREEN = 38;
@@ -122,6 +131,8 @@ function PuzzleGame({
   );
   const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, initialLevel));
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
+  const [levelPickerVisible, setLevelPickerVisible] = useState(false);
+  const [levelInput, setLevelInput] = useState('');
 
   useEffect(() => {
     onLevelChange(level);
@@ -164,34 +175,41 @@ function PuzzleGame({
     savedScale.value = target.scale;
   }, [canvasSize, width, height, scale, savedScale, translateX, translateY]);
 
+  const goToLevel = useCallback(
+    (targetLevel: number) => {
+      const nextLevel = Math.max(1, Math.floor(targetLevel));
+      const nextNodeCount = getDifficultyForLevel(nextLevel).nodeCount;
+      const nextCanvasSize = getCanvasSize(nextNodeCount, viewportMax);
+      const nextGraph = buildPuzzle(nextCanvasSize, nextLevel);
+      const nextCamera = getFitCamera(nextCanvasSize, width, height);
+
+      setLevel(nextLevel);
+      setCanvasSize(nextCanvasSize);
+      setGraph(nextGraph);
+      graphRef.current = nextGraph;
+      const nextCrossings = countCrossings(nextGraph);
+      setCrossings(nextCrossings);
+      crossingsRef.current = nextCrossings;
+      pulse.value = 0;
+
+      scale.value = nextCamera.scale;
+      savedScale.value = nextCamera.scale;
+      translateX.value = nextCamera.translateX;
+      translateY.value = nextCamera.translateY;
+
+      // Only between levels, never mid-drag — and only at a zone boundary,
+      // not on every level.
+      if (getZoneIndexForLevel(nextLevel) !== getZoneIndexForLevel(level)) {
+        showInterstitialIfReady();
+      }
+    },
+    [level, viewportMax, width, height, pulse, scale, savedScale, translateX, translateY]
+  );
+
   const advanceLevel = useCallback(() => {
     if (crossingsRef.current !== 0) return;
-    const nextLevel = level + 1;
-    const nextNodeCount = getDifficultyForLevel(nextLevel).nodeCount;
-    const nextCanvasSize = getCanvasSize(nextNodeCount, viewportMax);
-    const nextGraph = buildPuzzle(nextCanvasSize, nextLevel);
-    const nextCamera = getFitCamera(nextCanvasSize, width, height);
-
-    setLevel(nextLevel);
-    setCanvasSize(nextCanvasSize);
-    setGraph(nextGraph);
-    graphRef.current = nextGraph;
-    const nextCrossings = countCrossings(nextGraph);
-    setCrossings(nextCrossings);
-    crossingsRef.current = nextCrossings;
-    pulse.value = 0;
-
-    scale.value = nextCamera.scale;
-    savedScale.value = nextCamera.scale;
-    translateX.value = nextCamera.translateX;
-    translateY.value = nextCamera.translateY;
-
-    // Only between levels, never mid-drag — and only at a zone boundary,
-    // not on every level.
-    if (getZoneIndexForLevel(nextLevel) !== getZoneIndexForLevel(level)) {
-      showInterstitialIfReady();
-    }
-  }, [level, viewportMax, width, height, pulse, scale, savedScale, translateX, translateY]);
+    goToLevel(level + 1);
+  }, [level, goToLevel]);
 
   const recomputeCrossings = useCallback(() => {
     const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
@@ -381,8 +399,71 @@ function PuzzleGame({
           <Pressable style={styles.fitButton} onPress={resetCamera}>
             <Text style={styles.fitButtonText}>Fit</Text>
           </Pressable>
+          {__DEV__ && (
+            <Pressable
+              style={styles.fitButton}
+              onPress={() => {
+                setLevelInput(String(level));
+                setLevelPickerVisible(true);
+              }}
+            >
+              <Text style={styles.fitButtonText}>Lvl {level}</Text>
+            </Pressable>
+          )}
         </View>
       </View>
+
+      {__DEV__ && (
+        <Modal
+          visible={levelPickerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLevelPickerVisible(false)}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={() => setLevelPickerVisible(false)}>
+            <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+              <Text style={styles.modalTitle}>Jump to level</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={levelInput}
+                onChangeText={setLevelInput}
+                keyboardType="number-pad"
+                autoFocus
+                selectTextOnFocus
+                onSubmitEditing={() => {
+                  const n = parseInt(levelInput, 10);
+                  if (!Number.isNaN(n) && n >= 1) goToLevel(n);
+                  setLevelPickerVisible(false);
+                }}
+              />
+              <View style={styles.quickRow}>
+                {DEV_QUICK_LEVELS.map((lvl) => (
+                  <Pressable
+                    key={lvl}
+                    style={styles.quickButton}
+                    onPress={() => {
+                      goToLevel(lvl);
+                      setLevelPickerVisible(false);
+                    }}
+                  >
+                    <Text style={styles.quickButtonText}>{lvl}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                style={styles.modalGoButton}
+                onPress={() => {
+                  const n = parseInt(levelInput, 10);
+                  if (!Number.isNaN(n) && n >= 1) goToLevel(n);
+                  setLevelPickerVisible(false);
+                }}
+              >
+                <Text style={styles.modalGoButtonText}>Go</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -431,5 +512,61 @@ const styles = StyleSheet.create({
     color: COLORS.subtitle,
     fontSize: 13,
     fontWeight: '600',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCard: {
+    width: 280,
+    backgroundColor: '#241B38',
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    color: '#E4DBFA',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  modalInput: {
+    backgroundColor: 'rgba(228,219,250,0.12)',
+    color: '#E4DBFA',
+    fontSize: 18,
+    fontWeight: '600',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 14,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  quickButton: {
+    backgroundColor: 'rgba(228,219,250,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  quickButtonText: {
+    color: '#E4DBFA',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalGoButton: {
+    backgroundColor: '#F6A8B8',
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalGoButtonText: {
+    color: '#241B38',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
