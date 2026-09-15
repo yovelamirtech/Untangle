@@ -28,7 +28,7 @@ function statusLabel(status: BadgeStatus): string | null {
 }
 
 function BadgeCard({ badge, status, onPress }: { badge: Badge; status: BadgeStatus; onPress: () => void }) {
-  const playable = badge.contour.length > 0;
+  const playable = badge.contour.length > 0 || badge.graph !== undefined;
   const label = statusLabel(status);
 
   return (

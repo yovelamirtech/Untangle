@@ -123,6 +123,7 @@ export default function App() {
           onLevelChange={handleLevelChange}
           onOpenJourney={() => setScreen('journey')}
           onOpenSettings={openSettings}
+          onExitToMenu={() => setScreen('menu')}
         />
       ) : (
         <JourneyScreen furthestLevel={furthestLevel} onClose={() => setScreen('game')} />

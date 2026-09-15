@@ -67,9 +67,16 @@ interface PuzzleScreenProps {
   onLevelChange: (level: number) => void;
   onOpenJourney: () => void;
   onOpenSettings: () => void;
+  onExitToMenu: () => void;
 }
 
-export default function PuzzleScreen({ initialLevel, onLevelChange, onOpenJourney, onOpenSettings }: PuzzleScreenProps) {
+export default function PuzzleScreen({
+  initialLevel,
+  onLevelChange,
+  onOpenJourney,
+  onOpenSettings,
+  onExitToMenu,
+}: PuzzleScreenProps) {
   const { width, height } = useWindowDimensions();
   // On web, useWindowDimensions can report 0 on the very first render before
   // layout is measured. Since canvas size/graph are seeded once via a
@@ -84,6 +91,7 @@ export default function PuzzleScreen({ initialLevel, onLevelChange, onOpenJourne
       onLevelChange={onLevelChange}
       onOpenJourney={onOpenJourney}
       onOpenSettings={onOpenSettings}
+      onExitToMenu={onExitToMenu}
     />
   );
 }
@@ -95,6 +103,7 @@ function PuzzleGame({
   onLevelChange,
   onOpenJourney,
   onOpenSettings,
+  onExitToMenu,
 }: { width: number; height: number } & PuzzleScreenProps) {
   const viewportMax = Math.max(width, height);
 
@@ -363,6 +372,9 @@ function PuzzleGame({
 
       <View style={styles.overlay}>
         <View style={styles.leftGroup}>
+          <Pressable style={styles.settingsButton} onPress={onExitToMenu} hitSlop={12}>
+            <Ionicons name="home-outline" size={20} color={COLORS.subtitle} />
+          </Pressable>
           <Pressable style={styles.settingsButton} onPress={onOpenSettings} hitSlop={12}>
             <Ionicons name="settings-outline" size={20} color={COLORS.subtitle} />
           </Pressable>
