@@ -19,6 +19,7 @@ import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
+import { clampTranslate, getCanvasSize, getFitCamera } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
@@ -33,7 +34,6 @@ const NODE_RADIUS = 8;
 const HIT_RADIUS_SCREEN = 38;
 const ADVANCE_DELAY_MS = 1000;
 const CANVAS_MARGIN = 60;
-const FIT_PADDING = 0.92;
 const DRAG_THROTTLE_UPDATES = 3;
 const DRAG_BOUNDS_PADDING = 24;
 
@@ -49,35 +49,6 @@ interface NodeValue {
   id: number;
   x: SharedValue<number>;
   y: SharedValue<number>;
-}
-
-/** The rope spreads over a canvas a bit larger than the screen — more so for longer ropes. */
-function getCanvasSize(nodeCount: number, viewportMax: number): number {
-  return viewportMax * (1.1 + nodeCount / 50);
-}
-
-/** Clamps a pan/zoom translate so the canvas can never be dragged past its own edge. */
-function clampTranslate(value: number, scale: number, canvasSize: number, viewportLength: number) {
-  'worklet';
-  const contentLength = canvasSize * scale;
-  if (contentLength <= viewportLength) {
-    return (viewportLength - contentLength) / 2;
-  }
-  const min = viewportLength - contentLength;
-  return Math.min(Math.max(value, min), 0);
-}
-
-function getFitScale(canvasSize: number, viewportMin: number): number {
-  return (viewportMin / canvasSize) * FIT_PADDING;
-}
-
-function getFitCamera(canvasSize: number, width: number, height: number) {
-  const fitScale = getFitScale(canvasSize, Math.min(width, height));
-  return {
-    scale: fitScale,
-    translateX: (width - canvasSize * fitScale) / 2,
-    translateY: (height - canvasSize * fitScale) / 2,
-  };
 }
 
 function buildPuzzle(canvasSize: number, level: number): Graph {

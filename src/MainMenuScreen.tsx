@@ -10,17 +10,18 @@ const COLORS = {
   title: '#2B4A6B',
   journeyButton: '#4E93D9',
   journeyButtonText: '#FFFFFF',
-  badgeButton: 'rgba(78,147,217,0.12)',
-  badgeButtonText: 'rgba(43,74,107,0.55)',
+  badgeButton: 'rgba(78,147,217,0.16)',
+  badgeButtonText: '#2B4A6B',
   gearIcon: '#2B4A6B',
 };
 
 interface MainMenuScreenProps {
   onSelectJourney: () => void;
+  onSelectBadgeChallenge: () => void;
   onOpenSettings: () => void;
 }
 
-export default function MainMenuScreen({ onSelectJourney, onOpenSettings }: MainMenuScreenProps) {
+export default function MainMenuScreen({ onSelectJourney, onSelectBadgeChallenge, onOpenSettings }: MainMenuScreenProps) {
   return (
     <View style={styles.container}>
       <Pressable style={styles.settingsButton} onPress={onOpenSettings} hitSlop={12}>
@@ -35,13 +36,9 @@ export default function MainMenuScreen({ onSelectJourney, onOpenSettings }: Main
             <Text style={styles.journeyButtonText}>Journey</Text>
           </Pressable>
 
-          {/* Badge Challenge mode lands in Phase 10 — shown as a disabled
-              "coming soon" placeholder rather than hidden, so the mode
-              select already reads as a two-option hub. */}
-          <View style={[styles.button, styles.badgeButton]}>
+          <Pressable style={[styles.button, styles.badgeButton]} onPress={onSelectBadgeChallenge}>
             <Text style={styles.badgeButtonText}>Badge Challenge</Text>
-            <Text style={styles.comingSoonText}>Coming soon</Text>
-          </View>
+          </Pressable>
         </View>
       </View>
     </View>
@@ -95,11 +92,5 @@ const styles = StyleSheet.create({
     color: COLORS.badgeButtonText,
     fontSize: 20,
     fontWeight: '700',
-  },
-  comingSoonText: {
-    color: COLORS.badgeButtonText,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
   },
 });

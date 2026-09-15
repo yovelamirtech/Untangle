@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { initAds } from './src/ads';
+import BadgeCollectionScreen from './src/BadgeCollectionScreen';
+import { resetBadgeProgress } from './src/badgeProgress';
+import BadgePuzzleScreen from './src/BadgePuzzleScreen';
 import JourneyScreen from './src/JourneyScreen';
 import MainMenuScreen from './src/MainMenuScreen';
 import { loadProgress, resetProgress, saveProgress } from './src/progress';
@@ -17,11 +20,12 @@ import StudioSplashScreen from './src/StudioSplashScreen';
 // blank flash between the native splash disappearing and JS rendering.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-type Screen = 'studioSplash' | 'menu' | 'game' | 'journey' | 'settings';
+type Screen = 'studioSplash' | 'menu' | 'game' | 'journey' | 'settings' | 'badges' | 'badgePuzzle';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('studioSplash');
   const [furthestLevel, setFurthestLevel] = useState<number | null>(null);
+  const [activeBadgeId, setActiveBadgeId] = useState<string | null>(null);
   // Where "Back" from Settings should return to — it can be opened from
   // either the main menu or from inside a game screen.
   const screenBeforeSettings = useRef<Screen>('menu');
@@ -53,7 +57,7 @@ export default function App() {
   }, [screen]);
 
   const handleResetProgress = useCallback(async () => {
-    await resetProgress();
+    await Promise.all([resetProgress(), resetBadgeProgress()]);
     setFurthestLevel(1);
     setScreen('menu');
   }, []);
@@ -74,12 +78,40 @@ export default function App() {
   if (furthestLevel === null) return null;
 
   if (screen === 'menu') {
-    return <MainMenuScreen onSelectJourney={() => setScreen('game')} onOpenSettings={openSettings} />;
+    return (
+      <MainMenuScreen
+        onSelectJourney={() => setScreen('game')}
+        onSelectBadgeChallenge={() => setScreen('badges')}
+        onOpenSettings={openSettings}
+      />
+    );
   }
 
   if (screen === 'settings') {
     return (
       <SettingsScreen onBack={() => setScreen(screenBeforeSettings.current)} onResetProgress={handleResetProgress} />
+    );
+  }
+
+  if (screen === 'badges') {
+    return (
+      <BadgeCollectionScreen
+        onClose={() => setScreen('menu')}
+        onSelectBadge={(badgeId) => {
+          setActiveBadgeId(badgeId);
+          setScreen('badgePuzzle');
+        }}
+      />
+    );
+  }
+
+  if (screen === 'badgePuzzle' && activeBadgeId) {
+    return (
+      <BadgePuzzleScreen
+        badgeId={activeBadgeId}
+        onBack={() => setScreen('badges')}
+        onSolved={() => setScreen('badges')}
+      />
     );
   }
 
