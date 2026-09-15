@@ -390,14 +390,66 @@ const TOASTER_GRAPH: BadgeGraph = {
   ],
 };
 
+// Butterfly, fully vectorized from the reference line art the same way as
+// the toaster — symmetric wings each split into facets around a central
+// body spike.
+const BUTTERFLY_GRAPH: BadgeGraph = {
+  nodes: [
+    [100, 0],
+    [0, 0.3],
+    [1.1, 0.5],
+    [98.9, 0.5],
+    [31.5, 9.1],
+    [68.5, 9.1],
+    [5.3, 20.7],
+    [94.6, 20.7],
+    [30.3, 25.3],
+    [69.7, 25.3],
+    [30.9, 25.7],
+    [69.1, 25.7],
+    [16.8, 35.7],
+    [17.9, 35.7],
+    [82.1, 35.7],
+    [83, 35.7],
+    [46.7, 37.3],
+    [53.1, 37.4],
+    [46.8, 38],
+    [53, 38.2],
+    [44.2, 38.6],
+    [55.6, 38.6],
+    [46.9, 44.1],
+    [52.9, 44.1],
+    [8.2, 44.7],
+    [91.8, 44.7],
+    [7.5, 45.1],
+    [8, 45.1],
+    [91.9, 45.1],
+    [50, 55.7],
+    [29.1, 56],
+    [70.7, 56],
+    [43.6, 62.8],
+    [56.2, 62.8],
+    [14.8, 68.9],
+    [85.1, 68.9],
+  ],
+  edges: [
+    [1, 4], [5, 0], [2, 1], [0, 3], [2, 4], [5, 3], [0, 7], [1, 6],
+    [3, 9], [2, 8], [4, 16], [17, 5], [6, 8], [7, 9], [6, 12], [7, 15],
+    [10, 16], [17, 11], [10, 13], [11, 14], [16, 17], [13, 20], [21, 14],
+    [12, 24], [15, 25], [18, 20], [18, 22], [19, 21], [19, 23], [24, 20],
+    [21, 25], [22, 32], [22, 29], [23, 33], [23, 29], [27, 30], [28, 31],
+    [26, 34], [30, 32], [33, 31], [30, 34], [31, 35], [33, 35], [32, 34],
+  ],
+};
+
 export const BADGES: Badge[] = [
   { id: 'bird', name: 'Bird', hint: 'Wings spread, mid-flight', contour: BIRD_CONTOUR },
   { id: 'shark', name: 'Shark', hint: 'Fin above the water', contour: SHARK_CONTOUR },
   { id: 'toaster', name: 'Toaster', hint: 'Two slots, one dial', contour: [], graph: TOASTER_GRAPH },
-  // Butterfly, RTX 5090, Face are planned next — no contour yet, so
+  { id: 'butterfly', name: 'Butterfly', hint: 'Two wings, symmetric', contour: [], graph: BUTTERFLY_GRAPH },
+  // RTX 5090 and Face are planned next — no contour yet, so
   // getBadgeGraph() isn't called for them; the collection screen shows
   // them as "coming soon" instead of opening a puzzle.
-  { id: 'butterfly', name: 'Butterfly', hint: 'Coming soon', contour: [] },
   { id: 'rtx5090', name: 'RTX 5090', hint: 'Coming soon', contour: [] },
   { id: 'face', name: 'Face', hint: 'Coming soon', contour: [] },
 ];
