@@ -17,23 +17,23 @@ export interface Badge {
  * 5-30, since the solved shape needs to read as a recognizable silhouette. */
 export const BADGE_NODE_COUNT = 70;
 
-// Low-poly bird in flight, traced from a reference silhouette: a broad
-// swept-up wing at back-left, a pointed beak up front, and a triangular
-// tail hanging below the body.
+// Low-poly bird in flight, traced from a reference silhouette: a raised
+// wing with two swept-back peaks, a pointed beak up front, and a pointed
+// tail hanging below and behind the body.
 const BIRD_CONTOUR: [number, number][] = [
-  [42, 3],
-  [66, 38],
-  [76, 32],
-  [98, 50],
-  [80, 58],
-  [68, 68],
-  [55, 78],
-  [50, 68],
-  [42, 98],
-  [28, 72],
-  [18, 60],
-  [14, 42],
-  [26, 30],
+  [55, 5],
+  [60, 40],
+  [68, 28],
+  [80, 30],
+  [98, 40],
+  [82, 46],
+  [70, 55],
+  [55, 70],
+  [30, 70],
+  [18, 95],
+  [5, 62],
+  [25, 45],
+  [35, 35],
 ];
 
 // Low-poly shark in profile, traced from a reference silhouette: a thin
