@@ -15,6 +15,17 @@
 //        the ink-detection threshold and gap-closing strength per image;
 //        a photo of a physical object can need both loosened well past
 //        what a clean wireframe drawing needs (see rtx5090).
+//        VECTORIZE_FILL_ENCLOSED_MAX_AREA_FRACTION (with a
+//        VECTORIZE_FILL_ENCLOSED_MIN_AREA_FRACTION floor when needed) —
+//        see fillSmallEnclosedRegions; turns a closed-outline element
+//        (two strokes plus a tip and base) into a single centerline
+//        instead of tracing both of its edges. rtx5090's fan blades:
+//        VECTORIZE_DARK_THRESHOLD=190 VECTORIZE_CLOSE_ITERATIONS=2
+//        VECTORIZE_FILL_ENCLOSED_MAX_AREA_FRACTION=0.0014 — found by
+//        rendering _debug_mask.png (VECTORIZE_DEBUG_RAW=1) and reading
+//        off the enclosed regions' pixel-area log (VECTORIZE_DEBUG=1) to
+//        pick a cutoff between "a blade's own interior" and "the gap
+//        between two neighboring blades" (larger, and must stay hollow).
 //
 // Pipeline: threshold the image to a stroke mask -> keep every connected
 // component large enough to be real linework rather than just the single
@@ -40,7 +51,7 @@ const WORK_SIZE = 1000;
 // edges (toaster, butterfly) are already straight, so this changes nothing
 // for them; a curved single-line drawing (a portrait, a swept fan blade)
 // gets extra nodes exactly where it bends enough to matter.
-const CURVE_EPSILON = 4;
+const CURVE_EPSILON = 6;
 const CLUSTER_RADIUS = 3;
 // Deliberately smaller than CLUSTER_RADIUS: traceEdges erases a disc of
 // this radius around each node to isolate the arcs between them. Erasing
@@ -60,6 +71,19 @@ const HAIR_PRUNE_ITERATIONS = 7;
 // (see rtx5090, which needs both bumped).
 const DARK_THRESHOLD = Number(process.env.VECTORIZE_DARK_THRESHOLD || 170);
 const CLOSE_ITERATIONS = Number(process.env.VECTORIZE_CLOSE_ITERATIONS || 1);
+// Opt-in: see fillSmallEnclosedRegions. 0 disables it (the default — most
+// reference art, including every badge shipped so far, is single strokes
+// with nothing to fill); a source drawing built from closed-outline
+// elements (rtx5090's fan blades) needs it set to somewhat above that
+// element's own enclosed area as a fraction of the whole image, but well
+// below any region — like a fan's hub — that should stay hollow.
+const FILL_ENCLOSED_MAX_AREA_FRACTION = Number(process.env.VECTORIZE_FILL_ENCLOSED_MAX_AREA_FRACTION || 0);
+// Lower bound on the same knob: a thin gap *between* adjacent closed-
+// outline elements (e.g. the sliver of background between two overlapping
+// fan blades) is itself a small enclosed region, similar in size to the
+// blade's own interior — without a floor to exclude it, filling it too
+// fuses every blade into one solid ring with no blade detail left at all.
+const FILL_ENCLOSED_MIN_AREA_FRACTION = Number(process.env.VECTORIZE_FILL_ENCLOSED_MIN_AREA_FRACTION || 0);
 
 // Dilate a binary mask by 1px (8-connected). Two strokes that were meant
 // to meet (e.g. a T-junction where one stroke's anti-aliased end falls
@@ -110,6 +134,55 @@ function closeGaps(mask, width, height, iterations) {
   return out;
 }
 
+// Fills any enclosed background region under `maxAreaFraction` of the image
+// area solid. Some reference art draws a thin element (e.g. a fan blade) as
+// a closed outline — two long strokes plus a tip and a base — rather than
+// as a single stroke down its centerline; skeletonizing that outline as-is
+// traces both of its edges as separate arcs, which is far denser and more
+// tangled than the shape actually needs for this puzzle. Filling its thin
+// enclosed interior first means skeletonize() instead finds that outline's
+// medial axis — one line through the middle, the way a hand-sketched
+// facet edge would have been drawn. A big enclosed area (a wide background
+// gap, a hub's own interior) stays hollow, since it's what should still
+// read as an outline.
+function fillSmallEnclosedRegions(mask, width, height, maxAreaFraction, minAreaFraction) {
+  const maxArea = width * height * maxAreaFraction;
+  const minArea = width * height * minAreaFraction;
+  const labels = new Int32Array(width * height).fill(-1);
+  const out = mask.slice();
+  let next = 0;
+  const sizesLog = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i0 = y * width + x;
+      if (mask[i0] || labels[i0] !== -1) continue;
+      const label = next++;
+      const stack = [i0];
+      labels[i0] = label;
+      const region = [i0];
+      let touchesBorder = false;
+      while (stack.length) {
+        const idx = stack.pop();
+        const cx = idx % width, cy = (idx / width) | 0;
+        if (cx === 0 || cy === 0 || cx === width - 1 || cy === height - 1) touchesBorder = true;
+        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const nidx = ny * width + nx;
+          if (!mask[nidx] && labels[nidx] === -1) { labels[nidx] = label; stack.push(nidx); region.push(nidx); }
+        }
+      }
+      if (!touchesBorder && region.length <= maxArea && region.length >= minArea) for (const idx of region) out[idx] = 1;
+      if (process.env.VECTORIZE_DEBUG) sizesLog.push({ size: region.length, touchesBorder });
+    }
+  }
+  if (process.env.VECTORIZE_DEBUG) {
+    sizesLog.sort((a, b) => b.size - a.size);
+    console.log(`fillSmallEnclosedRegions: maxArea=${maxArea.toFixed(0)}, top enclosed sizes:`, sizesLog.filter((s) => !s.touchesBorder).slice(0, 15).map((s) => s.size));
+  }
+  return out;
+}
+
 async function loadDarkMask(path) {
   // Work at native resolution: resizing before thresholding blends thin
   // (1-2px) strokes into gray, and the resulting jagged binary edge
@@ -120,6 +193,14 @@ async function loadDarkMask(path) {
   let nativeDark = new Uint8Array(nativeW * nativeH);
   for (let i = 0; i < nativeW * nativeH; i++) nativeDark[i] = data[i] < DARK_THRESHOLD ? 1 : 0;
   nativeDark = closeGaps(nativeDark, nativeW, nativeH, CLOSE_ITERATIONS);
+  if (FILL_ENCLOSED_MAX_AREA_FRACTION > 0) {
+    nativeDark = fillSmallEnclosedRegions(nativeDark, nativeW, nativeH, FILL_ENCLOSED_MAX_AREA_FRACTION, FILL_ENCLOSED_MIN_AREA_FRACTION);
+  }
+  if (process.env.VECTORIZE_DEBUG_RAW) {
+    const buf = Buffer.alloc(nativeW * nativeH);
+    for (let i = 0; i < nativeW * nativeH; i++) buf[i] = nativeDark[i] ? 0 : 255;
+    await sharp(buf, { raw: { width: nativeW, height: nativeH, channels: 1 } }).png().toFile('_debug_mask.png');
+  }
 
   const scale = Math.min(1, WORK_SIZE / Math.max(nativeW, nativeH));
   const width = Math.round(nativeW * scale);
