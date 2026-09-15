@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -6,11 +7,17 @@ import { initAds } from './src/ads';
 import JourneyScreen from './src/JourneyScreen';
 import { loadProgress, saveProgress } from './src/progress';
 import PuzzleScreen from './src/PuzzleScreen';
+import StudioSplashScreen from './src/StudioSplashScreen';
 
-type Screen = 'game' | 'journey';
+// Keep the native launch splash (assets/splash-icon.png, see app.json) up
+// until the studio splash below is ready to take over — otherwise there's a
+// blank flash between the native splash disappearing and JS rendering.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+type Screen = 'studioSplash' | 'game' | 'journey';
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('game');
+  const [screen, setScreen] = useState<Screen>('studioSplash');
   const [furthestLevel, setFurthestLevel] = useState<number | null>(null);
 
   useEffect(() => {
@@ -19,6 +26,12 @@ export default function App() {
     initAds();
   }, []);
 
+  useEffect(() => {
+    // The studio splash component renders its own logo immediately, so the
+    // native splash can come down the moment it's mounted.
+    if (screen === 'studioSplash') SplashScreen.hideAsync().catch(() => {});
+  }, [screen]);
+
   const handleLevelChange = useCallback((level: number) => {
     setFurthestLevel((prev) => {
       const next = Math.max(prev ?? 1, level);
@@ -26,6 +39,19 @@ export default function App() {
       return next;
     });
   }, []);
+
+  if (screen === 'studioSplash') {
+    return (
+      <StudioSplashScreen
+        onFinish={() => {
+          // Progress may still be loading — PuzzleScreen/App itself waits on
+          // furthestLevel below, so it's safe to switch as soon as the
+          // animation ends even if loadProgress hasn't resolved yet.
+          setScreen('game');
+        }}
+      />
+    );
+  }
 
   if (furthestLevel === null) return null;
 

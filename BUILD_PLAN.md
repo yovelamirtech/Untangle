@@ -12,7 +12,7 @@ This doc is split into phases. Copy one phase at a time into Claude Code, verify
 | 4 - Visual & feel polish | ✅ Done |
 | 5 - Journey map & progress | ✅ Done |
 | 6 - Ads | ✅ Done (interstitial confirmed firing only at zone boundaries, via appetize.io device test) |
-| 7 - Studio splash & app branding | ⏳ Not started |
+| 7 - Studio splash & app branding | ✅ Done |
 | 8 - Main menu (mode select) | ⏳ Not started |
 | 9 - Settings screen | ⏳ Not started |
 | 10 - Badge Challenge mode | ⏳ Not started |
