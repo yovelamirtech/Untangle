@@ -16,12 +16,6 @@ export interface Graph {
   edges: Edge[];
 }
 
-function nodeById(nodes: Node[], id: number): Node {
-  const node = nodes.find((n) => n.id === id);
-  if (!node) throw new Error(`No node with id ${id}`);
-  return node;
-}
-
 function edgesShareEndpoint(a: Edge, b: Edge): boolean {
   return a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b;
 }
@@ -95,17 +89,24 @@ export function scrambleGraphAtLeast(
 
 /**
  * Counts how many pairs of (non-adjacent) edges currently cross.
+ *
+ * Builds a node-id lookup once up front — with an O(N) linear scan per
+ * lookup instead, this is O(E^2 * N), which turns a badge with a few
+ * hundred nodes/edges (toaster, rtx5090) into a multi-second-or-worse
+ * freeze on every drag update, since this runs synchronously on the JS
+ * thread.
  */
 export function countCrossings(graph: Graph): number {
   let count = 0;
   const { nodes, edges } = graph;
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
   for (let i = 0; i < edges.length; i++) {
     for (let j = i + 1; j < edges.length; j++) {
       if (edgesShareEndpoint(edges[i], edges[j])) continue;
-      const p1 = nodeById(nodes, edges[i].a);
-      const p2 = nodeById(nodes, edges[i].b);
-      const p3 = nodeById(nodes, edges[j].a);
-      const p4 = nodeById(nodes, edges[j].b);
+      const p1 = nodeById.get(edges[i].a)!;
+      const p2 = nodeById.get(edges[i].b)!;
+      const p3 = nodeById.get(edges[j].a)!;
+      const p4 = nodeById.get(edges[j].b)!;
       if (segmentsIntersect(p1, p2, p3, p4)) count++;
     }
   }

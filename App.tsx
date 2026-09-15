@@ -77,47 +77,39 @@ export default function App() {
 
   if (furthestLevel === null) return null;
 
-  if (screen === 'menu') {
-    return (
-      <MainMenuScreen
-        onSelectJourney={() => setScreen('game')}
-        onSelectBadgeChallenge={() => setScreen('badges')}
-        onOpenSettings={openSettings}
-      />
-    );
-  }
-
-  if (screen === 'settings') {
-    return (
-      <SettingsScreen onBack={() => setScreen(screenBeforeSettings.current)} onResetProgress={handleResetProgress} />
-    );
-  }
-
-  if (screen === 'badges') {
-    return (
-      <BadgeCollectionScreen
-        onClose={() => setScreen('menu')}
-        onSelectBadge={(badgeId) => {
-          setActiveBadgeId(badgeId);
-          setScreen('badgePuzzle');
-        }}
-      />
-    );
-  }
-
-  if (screen === 'badgePuzzle' && activeBadgeId) {
-    return (
-      <BadgePuzzleScreen
-        badgeId={activeBadgeId}
-        onBack={() => setScreen('badges')}
-        onSolved={() => setScreen('badges')}
-      />
-    );
-  }
-
+  // Every screen below is wrapped in one shared GestureHandlerRootView:
+  // react-native-gesture-handler's GestureDetector (used by BadgePuzzleScreen
+  // and PuzzleScreen) silently does nothing without a RootView ancestor, so
+  // this can't be scoped to just the screens that obviously use gestures.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {screen === 'game' ? (
+      {screen === 'menu' && (
+        <MainMenuScreen
+          onSelectJourney={() => setScreen('game')}
+          onSelectBadgeChallenge={() => setScreen('badges')}
+          onOpenSettings={openSettings}
+        />
+      )}
+      {screen === 'settings' && (
+        <SettingsScreen onBack={() => setScreen(screenBeforeSettings.current)} onResetProgress={handleResetProgress} />
+      )}
+      {screen === 'badges' && (
+        <BadgeCollectionScreen
+          onClose={() => setScreen('menu')}
+          onSelectBadge={(badgeId) => {
+            setActiveBadgeId(badgeId);
+            setScreen('badgePuzzle');
+          }}
+        />
+      )}
+      {screen === 'badgePuzzle' && activeBadgeId && (
+        <BadgePuzzleScreen
+          badgeId={activeBadgeId}
+          onBack={() => setScreen('badges')}
+          onSolved={() => setScreen('badges')}
+        />
+      )}
+      {screen === 'game' && (
         <PuzzleScreen
           initialLevel={furthestLevel}
           onLevelChange={handleLevelChange}
@@ -125,9 +117,8 @@ export default function App() {
           onOpenSettings={openSettings}
           onExitToMenu={() => setScreen('menu')}
         />
-      ) : (
-        <JourneyScreen furthestLevel={furthestLevel} onClose={() => setScreen('game')} />
       )}
+      {screen === 'journey' && <JourneyScreen furthestLevel={furthestLevel} onClose={() => setScreen('game')} />}
       <StatusBar style={screen === 'game' ? 'dark' : 'light'} />
     </GestureHandlerRootView>
   );
