@@ -1,3 +1,4 @@
+import { segmentsIntersect } from './geometry';
 import { Edge, Graph, Node } from './puzzle';
 
 export interface Badge {
@@ -116,8 +117,134 @@ function resampleClosedPolyline(points: [number, number][], count: number): [num
   return result;
 }
 
-/** Builds the badge's solved graph (ordered, non-crossing loop tracing its
- * silhouette), scaled and centered to fill `canvasSize` minus `margin`. */
+function crossZ(o: [number, number], a: [number, number], b: [number, number]): number {
+  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+}
+
+function signedArea(points: [number, number][]): number {
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const [x1, y1] = points[i];
+    const [x2, y2] = points[(i + 1) % points.length];
+    area += x1 * y2 - x2 * y1;
+  }
+  return area / 2;
+}
+
+function pointInTriangle(p: [number, number], a: [number, number], b: [number, number], c: [number, number]): boolean {
+  const d1 = crossZ(a, b, p);
+  const d2 = crossZ(b, c, p);
+  const d3 = crossZ(c, a, p);
+  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNeg && hasPos);
+}
+
+/**
+ * Ear-clipping triangulation of a simple polygon (convex or concave),
+ * returning vertex-index triples. Each step clips whichever valid ear has
+ * the smallest triangle area, which spreads the cuts around the boundary
+ * instead of fanning out from a single vertex — closer to the scattered
+ * facets of a hand-drawn low-poly silhouette.
+ */
+function triangulatePolygon(points: [number, number][]): [number, number, number][] {
+  const n = points.length;
+  const indices = Array.from({ length: n }, (_, i) => i);
+  const sign = Math.sign(signedArea(points)) || 1;
+  const triangles: [number, number, number][] = [];
+
+  let guard = 0;
+  while (indices.length > 3 && guard < n * n) {
+    guard++;
+    let bestI = -1;
+    let bestArea = Infinity;
+    for (let i = 0; i < indices.length; i++) {
+      const iPrev = indices[(i - 1 + indices.length) % indices.length];
+      const iCur = indices[i];
+      const iNext = indices[(i + 1) % indices.length];
+      const a = points[iPrev];
+      const b = points[iCur];
+      const c = points[iNext];
+      const cross = crossZ(a, b, c);
+      if (cross !== 0 && Math.sign(cross) !== sign) continue; // reflex vertex, not a valid ear
+
+      let hasPointInside = false;
+      for (const idx of indices) {
+        if (idx === iPrev || idx === iCur || idx === iNext) continue;
+        if (pointInTriangle(points[idx], a, b, c)) {
+          hasPointInside = true;
+          break;
+        }
+      }
+      if (hasPointInside) continue;
+
+      const area = Math.abs(cross) / 2;
+      if (area < bestArea) {
+        bestArea = area;
+        bestI = i;
+      }
+    }
+    if (bestI === -1) break; // shouldn't happen for a simple polygon, but avoid an infinite loop
+
+    const iPrev = indices[(bestI - 1 + indices.length) % indices.length];
+    const iCur = indices[bestI];
+    const iNext = indices[(bestI + 1) % indices.length];
+    triangles.push([iPrev, iCur, iNext]);
+    indices.splice(bestI, 1);
+  }
+  if (indices.length === 3) triangles.push([indices[0], indices[1], indices[2]]);
+
+  return triangles;
+}
+
+/** Triangulates the contour and returns just the internal diagonals (edges
+ * of the triangulation that aren't already part of the polygon boundary),
+ * as index pairs into `contour`. */
+function getInteriorDiagonals(contour: [number, number][]): [number, number][] {
+  const n = contour.length;
+  if (n < 4) return [];
+
+  const triangles = triangulatePolygon(contour);
+  const seen = new Set<string>();
+  const diagonals: [number, number][] = [];
+
+  for (const [t0, t1, t2] of triangles) {
+    for (const [u, v] of [
+      [t0, t1],
+      [t1, t2],
+      [t2, t0],
+    ]) {
+      const isBoundaryEdge = Math.abs(u - v) === 1 || Math.abs(u - v) === n - 1;
+      if (isBoundaryEdge) continue;
+      const key = u < v ? `${u}-${v}` : `${v}-${u}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      diagonals.push([u, v]);
+    }
+  }
+
+  return diagonals;
+}
+
+/** Index into `resampled` whose point is closest to `target`. */
+function nearestResampledIndex(resampled: [number, number][], target: [number, number]): number {
+  let bestIndex = 0;
+  let bestDistSq = Infinity;
+  for (let i = 0; i < resampled.length; i++) {
+    const dx = resampled[i][0] - target[0];
+    const dy = resampled[i][1] - target[1];
+    const distSq = dx * dx + dy * dy;
+    if (distSq < bestDistSq) {
+      bestDistSq = distSq;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+/** Builds the badge's solved graph: the resampled outline loop plus a
+ * handful of internal triangulation lines (echoing the low-poly reference
+ * art), scaled and centered to fill `canvasSize` minus `margin`. */
 export function getBadgeSolvedGraph(badge: Badge, canvasSize: number, margin: number): Graph {
   const resampled = resampleClosedPolyline(badge.contour, BADGE_NODE_COUNT);
 
@@ -142,6 +269,31 @@ export function getBadgeSolvedGraph(badge: Badge, canvasSize: number, margin: nu
   }));
 
   const edges: Edge[] = nodes.map((n, i) => ({ a: n.id, b: nodes[(i + 1) % nodes.length].id }));
+
+  // Snapping a diagonal's endpoints to the nearest resampled node can shift
+  // it just enough to clip a perimeter edge near a tight concave notch, so
+  // every candidate is checked against the edges accepted so far and
+  // dropped (rather than risk an unsolvable, pre-crossed "solved" state).
+  const diagonals = getInteriorDiagonals(badge.contour);
+  const seenEdges = new Set(edges.map((e) => (e.a < e.b ? `${e.a}-${e.b}` : `${e.b}-${e.a}`)));
+  for (const [u, v] of diagonals) {
+    const a = nearestResampledIndex(resampled, badge.contour[u]);
+    const b = nearestResampledIndex(resampled, badge.contour[v]);
+    if (a === b) continue;
+    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (seenEdges.has(key)) continue;
+
+    const pA = nodes[a];
+    const pB = nodes[b];
+    const crossesExisting = edges.some((e) => {
+      if (e.a === a || e.a === b || e.b === a || e.b === b) return false;
+      return segmentsIntersect(pA, pB, nodes[e.a], nodes[e.b]);
+    });
+    if (crossesExisting) continue;
+
+    seenEdges.add(key);
+    edges.push({ a, b });
+  }
 
   return { nodes, edges };
 }
