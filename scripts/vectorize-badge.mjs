@@ -7,20 +7,40 @@
 //        VECTORIZE_DEBUG=1 node scripts/vectorize-badge.mjs <path> — also
 //        logs any dropped ambiguous arcs (see traceEdges), useful when the
 //        output looks less detailed than the reference in a dense area.
+//        VECTORIZE_DEBUG_RAW=1 — also writes <name>_prepruned.json and
+//        <name>_raw.json (pre-normalize node/edge dumps, before and after
+//        curveSimplify) for overlaying on <name>_skel.png when the traced
+//        topology itself looks wrong, not just under-detailed.
+//        VECTORIZE_DARK_THRESHOLD, VECTORIZE_CLOSE_ITERATIONS — override
+//        the ink-detection threshold and gap-closing strength per image;
+//        a photo of a physical object can need both loosened well past
+//        what a clean wireframe drawing needs (see rtx5090).
 //
-// Pipeline: threshold the image to a stroke mask -> keep only the largest
-// connected component (drops floating text/labels that never touch the
-// wireframe) -> skeletonize to 1px lines (Zhang-Suen thinning) -> trim
-// short hairs (rasterization staircase artifacts) -> find junctions by
-// crossing number -> trace the skeleton between junctions -> prune
-// leftover spurs. Writes <name>_graph.json (ready to paste into
-// badges.ts) plus <name>_skel.png and <name>_vectorized.png for visual
-// sanity-checking before trusting the output.
+// Pipeline: threshold the image to a stroke mask -> keep every connected
+// component large enough to be real linework rather than just the single
+// largest (drops floating text/labels that never touch the drawing, but
+// keeps multiple same-scale disconnected pieces — e.g. rtx5090's outline
+// plus three separate fan icons) -> skeletonize to 1px lines (Zhang-Suen
+// thinning) -> trim short hairs (rasterization staircase artifacts) ->
+// find junctions by crossing number -> trace the skeleton between
+// junctions, following each arc's actual curve rather than a straight
+// chord between its endpoints (curveSimplify; a no-op for already-straight
+// low-poly facet edges) -> prune leftover spurs. Writes <name>_graph.json
+// (ready to paste into badges.ts) plus <name>_skel.png and
+// <name>_vectorized.png for visual sanity-checking before trusting the
+// output.
 import sharp from 'sharp';
 import { writeFileSync } from 'fs';
 import { basename, extname } from 'path';
 
 const WORK_SIZE = 1000;
+// How far (in work-canvas px) a traced arc's pixel path may bow away from
+// the straight line between its two node endpoints before curveSimplify
+// inserts an intermediate node to follow it. A low-poly wireframe's facet
+// edges (toaster, butterfly) are already straight, so this changes nothing
+// for them; a curved single-line drawing (a portrait, a swept fan blade)
+// gets extra nodes exactly where it bends enough to matter.
+const CURVE_EPSILON = 4;
 const CLUSTER_RADIUS = 3;
 // Deliberately smaller than CLUSTER_RADIUS: traceEdges erases a disc of
 // this radius around each node to isolate the arcs between them. Erasing
@@ -31,7 +51,15 @@ const CLUSTER_RADIUS = 3;
 const TRACE_NODE_RADIUS = 3;
 const SPUR_LENGTH = 18;
 const HAIR_PRUNE_ITERATIONS = 7;
-const DARK_THRESHOLD = 170;
+// Both overridable per-image: how dark a pixel must be to count as ink, and
+// how many px of gap the morphological close bridges before picking the
+// largest connected component. A photo of a physical object (e.g. a GPU
+// render) can have lighter or more broken linework than a clean wireframe
+// drawing, needing a looser threshold/more closing to read as one
+// connected mesh instead of fragmenting into several same-size islands
+// (see rtx5090, which needs both bumped).
+const DARK_THRESHOLD = Number(process.env.VECTORIZE_DARK_THRESHOLD || 170);
+const CLOSE_ITERATIONS = Number(process.env.VECTORIZE_CLOSE_ITERATIONS || 1);
 
 // Dilate a binary mask by 1px (8-connected). Two strokes that were meant
 // to meet (e.g. a T-junction where one stroke's anti-aliased end falls
@@ -75,8 +103,11 @@ function erode1px(mask, width, height) {
 // alone — permanently fattening every line, which fuses nearby-but-
 // separate features (decorative hatching, hairline-close parallel edges)
 // into one blob.
-function closeGaps(mask, width, height) {
-  return erode1px(dilate1px(mask, width, height), width, height);
+function closeGaps(mask, width, height, iterations) {
+  let out = mask;
+  for (let i = 0; i < iterations; i++) out = dilate1px(out, width, height);
+  for (let i = 0; i < iterations; i++) out = erode1px(out, width, height);
+  return out;
 }
 
 async function loadDarkMask(path) {
@@ -88,7 +119,7 @@ async function loadDarkMask(path) {
   const nativeW = info.width, nativeH = info.height;
   let nativeDark = new Uint8Array(nativeW * nativeH);
   for (let i = 0; i < nativeW * nativeH; i++) nativeDark[i] = data[i] < DARK_THRESHOLD ? 1 : 0;
-  nativeDark = closeGaps(nativeDark, nativeW, nativeH);
+  nativeDark = closeGaps(nativeDark, nativeW, nativeH, CLOSE_ITERATIONS);
 
   const scale = Math.min(1, WORK_SIZE / Math.max(nativeW, nativeH));
   const width = Math.round(nativeW * scale);
@@ -102,13 +133,17 @@ async function loadDarkMask(path) {
     }
   }
 
-  // Keep only the largest 8-connected component. Floating text/labels in
-  // the reference art (e.g. dial numbers) sit as separate islands that
-  // never touch the wireframe, so this drops them along with any other
-  // small stray marks while keeping the whole connected mesh (outline +
-  // interior facet lines + anything touching them).
+  // Keep every 8-connected component big enough to be real linework, not
+  // just the single largest. Floating text/labels in the reference art
+  // (e.g. dial numbers) sit as tiny islands relative to the actual
+  // drawing, so a size-relative floor drops those same as before — but
+  // some reference art (e.g. rtx5090: an outline plus three separate fan
+  // icons that never touch it) is legitimately several same-scale islands
+  // that must all survive, which a "keep only the single largest" rule
+  // would wrongly reduce to one.
   const labels = new Int32Array(width * height).fill(-1);
-  let bestLabel = -1, bestSize = 0, next = 0;
+  const sizes = [];
+  let next = 0;
   for (let i = 0; i < width * height; i++) {
     if (!dark[i] || labels[i] !== -1) continue;
     const label = next++;
@@ -126,10 +161,12 @@ async function loadDarkMask(path) {
         if (dark[nidx] && labels[nidx] === -1) { labels[nidx] = label; stack.push(nidx); }
       }
     }
-    if (size > bestSize) { bestSize = size; bestLabel = label; }
+    sizes.push(size);
   }
+  const largest = Math.max(0, ...sizes);
+  const keepThreshold = largest * 0.1;
   const filtered = new Uint8Array(width * height);
-  for (let i = 0; i < width * height; i++) filtered[i] = labels[i] === bestLabel ? 1 : 0;
+  for (let i = 0; i < width * height; i++) filtered[i] = sizes[labels[i]] >= keepThreshold ? 1 : 0;
 
   return { dark: filtered, width, height };
 }
@@ -344,6 +381,95 @@ function traceEdges(skel, width, height, nodes, nodeRadius, spreads) {
   return { edges, ambiguous };
 }
 
+// traceEdges' flood fill collects an arc's pixels in visitation order, not
+// along-the-curve order, so a straight chord between its endpoints is all
+// that can be drawn from it directly. Finds the arc's two farthest-apart
+// pixels (its "diameter" in the 8-connected adjacency graph — for a thin,
+// mostly-unbranched skeleton segment these are its two ends) via two BFS
+// passes, then returns the pixel path between them in walking order.
+function orderPathPixels(pixels) {
+  const n = pixels.length;
+  if (n <= 2) return pixels;
+  const indexOf = new Map();
+  pixels.forEach(([x, y], i) => indexOf.set(`${x},${y}`, i));
+  const adj = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) {
+    const [x, y] = pixels[i];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const j = indexOf.get(`${x + dx},${y + dy}`);
+        if (j !== undefined) adj[i].push(j);
+      }
+    }
+  }
+  function bfs(start) {
+    const dist = new Array(n).fill(-1);
+    const parent = new Array(n).fill(-1);
+    dist[start] = 0;
+    const queue = [start];
+    for (let qi = 0; qi < queue.length; qi++) {
+      const u = queue[qi];
+      for (const v of adj[u]) if (dist[v] === -1) { dist[v] = dist[u] + 1; parent[v] = u; queue.push(v); }
+    }
+    let far = start;
+    for (let i = 0; i < n; i++) if (dist[i] > dist[far]) far = i;
+    return { far, parent };
+  }
+  const r1 = bfs(0);
+  const r2 = bfs(r1.far);
+  const ordered = [];
+  for (let cur = r2.far; cur !== -1; cur = r2.parent[cur]) ordered.push(pixels[cur]);
+  ordered.reverse();
+  return ordered;
+}
+
+// Ramer-Douglas-Peucker: reduces an ordered point path to the minimal
+// subset of points such that no dropped point strayed more than `epsilon`
+// from the straight segment that replaced it.
+function rdpSimplify(points, epsilon) {
+  if (points.length < 3) return points;
+  const [x1, y1] = points[0];
+  const [x2, y2] = points[points.length - 1];
+  const dx = x2 - x1, dy = y2 - y1;
+  const segLen = Math.hypot(dx, dy);
+  let maxDist = -1, splitIndex = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const [x, y] = points[i];
+    const dist = segLen === 0 ? Math.hypot(x - x1, y - y1) : Math.abs(dy * x - dx * y + x2 * y1 - y2 * x1) / segLen;
+    if (dist > maxDist) { maxDist = dist; splitIndex = i; }
+  }
+  if (maxDist <= epsilon) return [points[0], points[points.length - 1]];
+  const left = rdpSimplify(points.slice(0, splitIndex + 1), epsilon);
+  const right = rdpSimplify(points.slice(splitIndex), epsilon);
+  return left.slice(0, -1).concat(right);
+}
+
+// Replaces each pruned edge with a chain through however many intermediate
+// nodes its traced pixel path needs (per rdpSimplify) to actually follow
+// the source art's curve, instead of a single straight chord that cuts
+// across it. A no-op for already-straight edges (RDP collapses those to
+// just the two endpoints, same as today), so low-poly wireframes are
+// unaffected.
+function curveSimplify(nodes, edges, epsilon) {
+  const outNodes = nodes.slice();
+  const outEdges = [];
+  for (const e of edges) {
+    const ordered = orderPathPixels(e.path ?? []);
+    const full = [nodes[e.a], ...ordered, nodes[e.b]];
+    const simplified = rdpSimplify(full, epsilon);
+    let prevIndex = e.a;
+    for (let i = 1; i < simplified.length - 1; i++) {
+      const newIndex = outNodes.length;
+      outNodes.push(simplified[i]);
+      outEdges.push({ a: prevIndex, b: newIndex });
+      prevIndex = newIndex;
+    }
+    outEdges.push({ a: prevIndex, b: e.b });
+  }
+  return { nodes: outNodes, edges: outEdges };
+}
+
 function edgeLength(path) {
   let len = 0;
   for (let i = 1; i < path.length; i++) len += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
@@ -445,8 +571,19 @@ async function vectorize(imagePath, outName) {
   nodes = pruned.nodes;
   edges = pruned.edges;
   console.log(`${outName}: after spur pruning: nodes ${nodes.length}, edges ${edges.length}`);
+  if (process.env.VECTORIZE_DEBUG_RAW) {
+    writeFileSync(`${outName}_prepruned.json`, JSON.stringify({ nodes, edges: edges.map((e) => [e.a, e.b]) }, null, 2));
+  }
+
+  const curved = curveSimplify(nodes, edges, CURVE_EPSILON);
+  nodes = curved.nodes;
+  edges = curved.edges;
+  console.log(`${outName}: after curve simplification: nodes ${nodes.length}, edges ${edges.length}`);
 
   await renderGraph(nodes, edges, width, height, `${outName}_vectorized.png`);
+  if (process.env.VECTORIZE_DEBUG_RAW) {
+    writeFileSync(`${outName}_raw.json`, JSON.stringify({ nodes, edges: edges.map((e) => [e.a, e.b]) }, null, 2));
+  }
 
   const normalized = normalize(nodes);
   const graph = { nodes: normalized, edges: edges.map((e) => [e.a, e.b]) };
