@@ -17,45 +17,68 @@ export interface Badge {
  * 5-30, since the solved shape needs to read as a recognizable silhouette. */
 export const BADGE_NODE_COUNT = 70;
 
-// Low-poly bird in flight, traced from a reference silhouette: a raised
-// wing with two swept-back peaks, a pointed beak up front, and a pointed
-// tail hanging below and behind the body.
+// Bird in flight, auto-traced from a reference silhouette (flood-filled
+// from the image border to recover the true outline, then simplified) —
+// not hand-guessed, so it matches the source image's proportions: a raised
+// wing with two swept-back peaks, a pointed beak, and a tail hanging below
+// and behind the body.
 const BIRD_CONTOUR: [number, number][] = [
-  [55, 5],
-  [60, 40],
-  [68, 28],
-  [80, 30],
-  [98, 40],
-  [82, 46],
-  [70, 55],
-  [55, 70],
-  [30, 70],
-  [18, 95],
-  [5, 62],
-  [25, 45],
-  [35, 35],
+  [40.8, 2.5],
+  [50.4, 45],
+  [56.7, 41.3],
+  [66.3, 40.4],
+  [85.8, 51.3],
+  [72.5, 54.2],
+  [67.1, 58.8],
+  [62.1, 70.8],
+  [47.5, 80.8],
+  [25.8, 82.5],
+  [10.8, 100],
+  [6.3, 89.6],
+  [17.5, 72.9],
+  [28.8, 62.5],
+  [22.1, 54.2],
+  [0, 39.2],
+  [1.7, 0],
+  [32.1, 28.3],
+  [31.7, 22.1],
+  [39.6, 1.7],
 ];
 
-// Low-poly shark in profile, traced from a reference silhouette: a thin
-// tail spike at left, a tall triangular dorsal fin on top, a pointed
-// snout at the right, and two ventral fins along the belly.
+// Shark in profile, auto-traced the same way: a thin tail spike at left, a
+// tall triangular dorsal fin on top, a pointed snout at the right, and two
+// ventral fins along the belly.
 const SHARK_CONTOUR: [number, number][] = [
-  [2, 45],
-  [18, 38],
-  [48, 30],
-  [58, 6],
-  [68, 32],
-  [85, 35],
-  [93, 42],
-  [98, 50],
-  [88, 56],
-  [78, 60],
-  [60, 66],
-  [52, 82],
-  [46, 64],
-  [34, 88],
-  [26, 60],
-  [16, 52],
+  [99.8, 26.3],
+  [91, 29.2],
+  [77.1, 29.4],
+  [66.7, 34.2],
+  [59.3, 35.5],
+  [67.2, 28.8],
+  [52.8, 26.7],
+  [48.3, 29],
+  [44.7, 25.2],
+  [38.9, 24],
+  [32.1, 27],
+  [32.8, 24.9],
+  [29.2, 23.8],
+  [25.8, 24.5],
+  [22.7, 30.6],
+  [18, 35.1],
+  [18.4, 25.6],
+  [4, 15.5],
+  [0, 10.8],
+  [23.4, 21.6],
+  [31.2, 16.9],
+  [32.6, 13.9],
+  [36.9, 14.8],
+  [59.8, 11.2],
+  [62.5, 9.2],
+  [62.5, 1.8],
+  [63.4, 0],
+  [65.8, 1.3],
+  [74.4, 12.8],
+  [100, 24],
 ];
 
 export const BADGES: Badge[] = [
