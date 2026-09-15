@@ -2,13 +2,13 @@ import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated';
 
-// assets/studio-splash-logo.png is generated from assets/studio_logo/icon-primary.svg
+// assets/studio-splash-logo.png is generated from assets/studio_logo/icon-appstore.svg
 // via scripts/generate-icons.mjs — re-run that script if the source SVG changes.
 const STUDIO_LOGO = require('../assets/studio-splash-logo.png');
 
-const FADE_IN_MS = 350;
-const HOLD_MS = 550;
-const FADE_OUT_MS = 350;
+const FADE_IN_MS = 700;
+const HOLD_MS = 1200;
+const FADE_OUT_MS = 700;
 // Studio logo's own background (assets/studio_logo/icon-primary.svg), so the
 // screen edge and the logo's rounded square blend into one flat field.
 const BACKGROUND_COLOR = '#5B4B87';

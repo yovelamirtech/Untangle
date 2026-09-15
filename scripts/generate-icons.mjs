@@ -13,7 +13,9 @@ const jobs = [
   { svg: 'game_logo/icon-main.svg', out: 'icon.png', size: 1024 },
   { svg: 'game_logo/icon-main.svg', out: 'splash-icon.png', size: 1024 },
   // Studio splash asset used by the animated StudioSplashScreen component.
-  { svg: 'studio_logo/icon-primary.svg', out: 'studio-splash-logo.png', size: 1024 },
+  // icon-appstore.svg (not icon-primary.svg) — same mark without the
+  // cartridge-notch rect on top, which read as a stray purple bar here.
+  { svg: 'studio_logo/icon-appstore.svg', out: 'studio-splash-logo.png', size: 1024 },
 ];
 
 for (const job of jobs) {
