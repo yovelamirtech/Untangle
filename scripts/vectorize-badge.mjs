@@ -4,6 +4,9 @@
 // a Badge in src/badges.ts (see BADGES.toaster for an example).
 //
 // Usage: node scripts/vectorize-badge.mjs <path-to-reference-image>
+//        VECTORIZE_DEBUG=1 node scripts/vectorize-badge.mjs <path> — also
+//        logs any dropped ambiguous arcs (see traceEdges), useful when the
+//        output looks less detailed than the reference in a dense area.
 //
 // Pipeline: threshold the image to a stroke mask -> keep only the largest
 // connected component (drops floating text/labels that never touch the
@@ -17,8 +20,8 @@ import sharp from 'sharp';
 import { writeFileSync } from 'fs';
 import { basename, extname } from 'path';
 
-const WORK_SIZE = 700;
-const CLUSTER_RADIUS = 6;
+const WORK_SIZE = 1000;
+const CLUSTER_RADIUS = 3;
 // Deliberately smaller than CLUSTER_RADIUS: traceEdges erases a disc of
 // this radius around each node to isolate the arcs between them. Erasing
 // at the full cluster radius wiped out short-but-real connecting segments
@@ -239,6 +242,12 @@ function findJunctionsAndEndpoints(skel, width, height) {
 
 // Cluster raw junction/endpoint pixels that sit within `radius` of each
 // other into single graph nodes (a junction often thins to a small blob).
+// Returns both each cluster's center and its `spread` (max distance from
+// center to any raw point folded into it). A vertex where many facet
+// lines converge skeletonizes to a many-pixel blob, not a point, and
+// chains together (single-linkage) into one wide cluster; `spread` lets
+// traceEdges erase exactly as much as that specific blob needs instead of
+// a one-size-fits-all radius (see traceEdges).
 function clusterPoints(points, radius) {
   const clusters = [];
   const used = new Array(points.length).fill(false);
@@ -257,9 +266,10 @@ function clusterPoints(points, radius) {
     }
     const cx = group.reduce((a, p) => a + p[0], 0) / group.length;
     const cy = group.reduce((a, p) => a + p[1], 0) / group.length;
-    clusters.push([cx, cy]);
+    const spread = Math.max(...group.map((p) => Math.hypot(p[0] - cx, p[1] - cy)));
+    clusters.push({ point: [cx, cy], spread });
   }
-  return clusters;
+  return { points: clusters.map((c) => c.point), spreads: clusters.map((c) => c.spread) };
 }
 
 // Erase a disc of `nodeRadius` around each node center from the skeleton,
@@ -268,17 +278,24 @@ function clusterPoints(points, radius) {
 // belonging to exactly one edge. Reading off which node zone(s) each
 // component touches is far more robust than walking the skeleton pixel by
 // pixel and guessing which neighbor continues the same line at a junction.
-function traceEdges(skel, width, height, nodes, nodeRadius) {
+function traceEdges(skel, width, height, nodes, nodeRadius, spreads) {
   const idx = (x, y) => y * width + x;
   const nodeZone = new Int32Array(width * height).fill(-1);
   for (let ni = 0; ni < nodes.length; ni++) {
     const [cx, cy] = nodes[ni];
-    const r = Math.ceil(nodeRadius);
+    // A vertex where many lines converge left a many-pixel blob pre-
+    // clustering (reflected in a large `spread`), not a point — erase
+    // exactly that much of it, no more, so its distinct arms actually
+    // separate into their own traceable components instead of a stub of
+    // the blob bridging two arms into one (which later gets dropped as
+    // "touches >2 nodes, ambiguous").
+    const effectiveRadius = Math.max(nodeRadius, Math.min((spreads?.[ni] ?? 0) + 1, nodeRadius * 3));
+    const r = Math.ceil(effectiveRadius);
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         const x = Math.round(cx) + dx, y = Math.round(cy) + dy;
         if (x < 0 || y < 0 || x >= width || y >= height) continue;
-        if (Math.hypot(dx, dy) <= nodeRadius) nodeZone[idx(x, y)] = ni;
+        if (Math.hypot(dx, dy) <= effectiveRadius) nodeZone[idx(x, y)] = ni;
       }
     }
   }
@@ -288,6 +305,7 @@ function traceEdges(skel, width, height, nodes, nodeRadius) {
 
   const visited = new Uint8Array(width * height);
   const edges = [];
+  const ambiguous = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i0 = idx(x, y);
@@ -316,10 +334,14 @@ function traceEdges(skel, width, height, nodes, nodeRadius) {
       const distinct = [...touchedNodes];
       if (distinct.length === 2) edges.push({ a: distinct[0], b: distinct[1], path });
       // 0 or 1 touched nodes: isolated fleck or dangling spur — drop.
-      // >2: an arc brushing more than two zones (rare); drop rather than guess.
+      // >2: an arc brushing more than two zones (rare, but real — usually
+      // a dense-mesh area where two unrelated arcs happened to run pixel-
+      // adjacent for a stretch); drop rather than guess, but record it so
+      // --debug can report how much detail this cost.
+      if (distinct.length > 2) ambiguous.push({ nodes: distinct, pixels: path.length, sample: path[0] });
     }
   }
-  return edges;
+  return { edges, ambiguous };
 }
 
 function edgeLength(path) {
@@ -400,10 +422,15 @@ async function vectorize(imagePath, outName) {
   await sharp(skelPng, { raw: { width, height, channels: 1 } }).png().toFile(`${outName}_skel.png`);
 
   const rawPoints = findJunctionsAndEndpoints(skel, width, height);
-  let nodes = clusterPoints(rawPoints, CLUSTER_RADIUS);
+  const clustered = clusterPoints(rawPoints, CLUSTER_RADIUS);
+  let nodes = clustered.points;
+  const spreads = clustered.spreads;
   console.log(`${outName}: raw junction/endpoint pixels: ${rawPoints.length}, clustered nodes: ${nodes.length}`);
 
-  const rawEdges = traceEdges(skel, width, height, nodes, TRACE_NODE_RADIUS);
+  const { edges: rawEdges, ambiguous } = traceEdges(skel, width, height, nodes, TRACE_NODE_RADIUS, spreads);
+  if (ambiguous.length && process.env.VECTORIZE_DEBUG) {
+    console.log(`${outName}: dropped ${ambiguous.length} ambiguous arc(s) touching >2 nodes:`, JSON.stringify(ambiguous.slice(0, 10)));
+  }
   const seen = new Set();
   let edges = [];
   for (const e of rawEdges) {
