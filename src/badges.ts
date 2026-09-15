@@ -16,51 +16,41 @@ export interface Badge {
  * 5-30, since the solved shape needs to read as a recognizable silhouette. */
 export const BADGE_NODE_COUNT = 70;
 
-// Low-poly bird in flight, profile view: tail at back, a raised wing with
-// three swept-back primary feathers, then head/beak up front.
+// Low-poly hummingbird in flight, traced from a reference silhouette: a tall
+// swept-up wing at back-left, beak pointing right, and a pointed tail
+// feather hanging down-left of the body.
 const BIRD_CONTOUR: [number, number][] = [
-  [2, 62],
-  [12, 54],
-  [18, 50],
-  [24, 36],
-  [30, 24],
-  [20, 6],
-  [34, 18],
-  [28, 2],
-  [44, 14],
-  [40, 0],
-  [54, 12],
-  [62, 14],
-  [70, 10],
-  [80, 14],
-  [94, 20],
-  [82, 24],
-  [74, 28],
-  [66, 36],
-  [58, 48],
-  [46, 58],
-  [32, 62],
-  [16, 60],
+  [34, 0],
+  [48, 32],
+  [58, 20],
+  [72, 42],
+  [98, 52],
+  [74, 58],
+  [64, 66],
+  [56, 96],
+  [44, 68],
+  [30, 78],
+  [18, 56],
+  [26, 40],
 ];
 
-// Low-poly shark in profile: pointed snout, tall triangular dorsal fin,
-// crescent tail, and a pectoral fin along the belly.
+// Low-poly shark in profile, traced from a reference silhouette: forked
+// tail at left, tall triangular dorsal fin on top, pectoral fin along the
+// belly, and a pointed snout at the right.
 const SHARK_CONTOUR: [number, number][] = [
-  [5, 50],
-  [14, 38],
-  [28, 32],
-  [38, 14],
-  [48, 30],
-  [68, 34],
-  [92, 16],
-  [78, 50],
-  [92, 84],
-  [68, 66],
-  [50, 74],
-  [34, 78],
-  [30, 88],
-  [26, 72],
-  [14, 62],
+  [2, 38],
+  [12, 46],
+  [2, 64],
+  [18, 56],
+  [24, 80],
+  [34, 58],
+  [58, 64],
+  [96, 56],
+  [84, 44],
+  [66, 40],
+  [50, 10],
+  [40, 36],
+  [20, 34],
 ];
 
 export const BADGES: Badge[] = [
