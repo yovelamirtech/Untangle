@@ -81,13 +81,55 @@ const SHARK_CONTOUR: [number, number][] = [
   [100, 24],
 ];
 
+// Toaster body, auto-traced the same way. The reference art's toast slots,
+// dial, and lettering are interior detail the flood-fill correctly folds
+// into the solid silhouette — this system has no notion of a hole in a
+// badge shape, so the smooth auto-traced box got two hand-added hints of
+// those features instead: a small notch carved into the top edge for the
+// toast slot, and a bump on the right edge for the dial housing.
+const TOASTER_CONTOUR: [number, number][] = [
+  [83.5, 86],
+  [79.9, 86.2],
+  [69.1, 92.3],
+  [57.4, 96.9],
+  [56.8, 98],
+  [52, 100],
+  [48.3, 97.6],
+  [47.6, 96.5],
+  [41.9, 93.3],
+  [24.6, 81.3],
+  [15.8, 74.2],
+  [7.1, 66.1],
+  [3.2, 62.3],
+  [0.9, 57.8],
+  [0.7, 56.5],
+  [0, 22],
+  [1.7, 15.3],
+  [5.6, 9.8],
+  [11.2, 6.1],
+  [20.1, 2.6],
+  [31.1, 0],
+  [32.5, 6], // toast-slot notch, hand-added
+  [34.5, 6], // toast-slot notch, hand-added
+  [36, 0],
+  [61.2, 11.7],
+  [77.7, 20.6],
+  [81.4, 23.2],
+  [86.7, 29.9],
+  [88.3, 34.5],
+  [89.2, 40.1],
+  [94, 52], // dial-housing bump, hand-added
+  [94, 63], // dial-housing bump, hand-added
+  [88.7, 76.1],
+];
+
 export const BADGES: Badge[] = [
   { id: 'bird', name: 'Bird', hint: 'Wings spread, mid-flight', contour: BIRD_CONTOUR },
   { id: 'shark', name: 'Shark', hint: 'Fin above the water', contour: SHARK_CONTOUR },
-  // Toaster, Butterfly, RTX 5090, Face are planned next — no contour yet,
-  // so getBadgeGraph() isn't called for them; the collection screen shows
+  { id: 'toaster', name: 'Toaster', hint: 'Two slots, one dial', contour: TOASTER_CONTOUR },
+  // Butterfly, RTX 5090, Face are planned next — no contour yet, so
+  // getBadgeGraph() isn't called for them; the collection screen shows
   // them as "coming soon" instead of opening a puzzle.
-  { id: 'toaster', name: 'Toaster', hint: 'Coming soon', contour: [] },
   { id: 'butterfly', name: 'Butterfly', hint: 'Coming soon', contour: [] },
   { id: 'rtx5090', name: 'RTX 5090', hint: 'Coming soon', contour: [] },
   { id: 'face', name: 'Face', hint: 'Coming soon', contour: [] },
