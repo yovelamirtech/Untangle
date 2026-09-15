@@ -16,37 +16,36 @@ export interface Badge {
  * 5-30, since the solved shape needs to read as a recognizable silhouette. */
 export const BADGE_NODE_COUNT = 70;
 
-// Low-poly bird in profile: rounded back, head, beak notch, chest/belly,
-// and a single leg (the far leg is hidden behind it, as in most bird icons).
+// Low-poly bird in flight, profile view: tail at back, a raised wing with
+// three swept-back primary feathers, then head/beak up front.
 const BIRD_CONTOUR: [number, number][] = [
-  [5, 55],
-  [16, 42],
-  [22, 34],
-  [32, 22],
-  [46, 14],
-  [58, 8],
-  [70, 6],
-  [80, 10],
-  [88, 18],
-  [98, 24],
-  [100, 28],
-  [94, 32],
-  [84, 34],
-  [76, 42],
-  [70, 54],
-  [62, 68],
-  [54, 80],
-  [52, 90],
-  [60, 94],
-  [46, 94],
-  [44, 88],
-  [32, 80],
-  [18, 70],
-  [8, 62],
+  [2, 62],
+  [12, 54],
+  [18, 50],
+  [24, 36],
+  [30, 24],
+  [20, 6],
+  [34, 18],
+  [28, 2],
+  [44, 14],
+  [40, 0],
+  [54, 12],
+  [62, 14],
+  [70, 10],
+  [80, 14],
+  [94, 20],
+  [82, 24],
+  [74, 28],
+  [66, 36],
+  [58, 48],
+  [46, 58],
+  [32, 62],
+  [16, 60],
 ];
 
-// Low-poly fish in profile: mouth, dorsal fin, forked tail, pelvic fin.
-const FISH_CONTOUR: [number, number][] = [
+// Low-poly shark in profile: pointed snout, tall triangular dorsal fin,
+// crescent tail, and a pectoral fin along the belly.
+const SHARK_CONTOUR: [number, number][] = [
   [5, 50],
   [14, 38],
   [28, 32],
@@ -65,8 +64,8 @@ const FISH_CONTOUR: [number, number][] = [
 ];
 
 export const BADGES: Badge[] = [
-  { id: 'bird', name: 'Bird', hint: 'A garden visitor with wings', contour: BIRD_CONTOUR },
-  { id: 'fish', name: 'Fish', hint: 'Swims, doesn’t fly', contour: FISH_CONTOUR },
+  { id: 'bird', name: 'Bird', hint: 'Wings spread, mid-flight', contour: BIRD_CONTOUR },
+  { id: 'shark', name: 'Shark', hint: 'Fin above the water', contour: SHARK_CONTOUR },
   // Toaster, Butterfly, RTX 5090, Face are planned next — no contour yet,
   // so getBadgeGraph() isn't called for them; the collection screen shows
   // them as "coming soon" instead of opening a puzzle.
