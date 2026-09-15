@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { initAds } from './src/ads';
 import JourneyScreen from './src/JourneyScreen';
+import MainMenuScreen from './src/MainMenuScreen';
 import { loadProgress, saveProgress } from './src/progress';
 import PuzzleScreen from './src/PuzzleScreen';
 import StudioSplashScreen from './src/StudioSplashScreen';
@@ -14,7 +15,7 @@ import StudioSplashScreen from './src/StudioSplashScreen';
 // blank flash between the native splash disappearing and JS rendering.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-type Screen = 'studioSplash' | 'game' | 'journey';
+type Screen = 'studioSplash' | 'menu' | 'game' | 'journey';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('studioSplash');
@@ -47,13 +48,23 @@ export default function App() {
           // Progress may still be loading — PuzzleScreen/App itself waits on
           // furthestLevel below, so it's safe to switch as soon as the
           // animation ends even if loadProgress hasn't resolved yet.
-          setScreen('game');
+          setScreen('menu');
         }}
       />
     );
   }
 
   if (furthestLevel === null) return null;
+
+  if (screen === 'menu') {
+    return (
+      <MainMenuScreen
+        onSelectJourney={() => setScreen('game')}
+        // Settings screen lands in Phase 9 — no-op for now.
+        onOpenSettings={() => {}}
+      />
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
