@@ -19,9 +19,62 @@ import { basename, extname } from 'path';
 
 const WORK_SIZE = 700;
 const CLUSTER_RADIUS = 6;
+// Deliberately smaller than CLUSTER_RADIUS: traceEdges erases a disc of
+// this radius around each node to isolate the arcs between them. Erasing
+// at the full cluster radius wiped out short-but-real connecting segments
+// between two vertices that sit close together (the two discs overlapped
+// and swallowed the whole segment), leaving disconnected-looking gaps in
+// the output even though the source line art has no such gaps.
+const TRACE_NODE_RADIUS = 3;
 const SPUR_LENGTH = 18;
 const HAIR_PRUNE_ITERATIONS = 7;
 const DARK_THRESHOLD = 170;
+
+// Dilate a binary mask by 1px (8-connected). Two strokes that were meant
+// to meet (e.g. a T-junction where one stroke's anti-aliased end falls
+// just short of the other) can leave a 1px gap after hard thresholding;
+// that gap breaks the skeleton into two pieces that never connect into a
+// single traced edge. A 1px dilation closes gaps of that size without
+// visibly fusing lines that are genuinely separate.
+function dilate1px(mask, width, height) {
+  const at = (x, y) => (x < 0 || y < 0 || x >= width || y >= height ? 0 : mask[y * width + x]);
+  const out = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (mask[y * width + x]) { out[y * width + x] = 1; continue; }
+      let hit = false;
+      for (let dy = -1; dy <= 1 && !hit; dy++)
+        for (let dx = -1; dx <= 1 && !hit; dx++) if (at(x + dx, y + dy)) hit = true;
+      out[y * width + x] = hit ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+function erode1px(mask, width, height) {
+  const at = (x, y) => (x < 0 || y < 0 || x >= width || y >= height ? 0 : mask[y * width + x]);
+  const out = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!mask[y * width + x]) continue;
+      let allSet = true;
+      for (let dy = -1; dy <= 1 && allSet; dy++)
+        for (let dx = -1; dx <= 1 && allSet; dx++) if (!at(x + dx, y + dy)) allSet = false;
+      out[y * width + x] = allSet ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+// Morphological closing: bridges a 1-2px gap (e.g. an anti-aliased stroke
+// end that falls just short of the line it was meant to touch) while, by
+// eroding back afterward, mostly avoiding the side effect of dilation
+// alone — permanently fattening every line, which fuses nearby-but-
+// separate features (decorative hatching, hairline-close parallel edges)
+// into one blob.
+function closeGaps(mask, width, height) {
+  return erode1px(dilate1px(mask, width, height), width, height);
+}
 
 async function loadDarkMask(path) {
   // Work at native resolution: resizing before thresholding blends thin
@@ -30,8 +83,9 @@ async function loadDarkMask(path) {
   // downsize the already-binary mask with nearest-neighbor (no blending).
   const { data, info } = await sharp(path).grayscale().raw().toBuffer({ resolveWithObject: true });
   const nativeW = info.width, nativeH = info.height;
-  const nativeDark = new Uint8Array(nativeW * nativeH);
+  let nativeDark = new Uint8Array(nativeW * nativeH);
   for (let i = 0; i < nativeW * nativeH; i++) nativeDark[i] = data[i] < DARK_THRESHOLD ? 1 : 0;
+  nativeDark = closeGaps(nativeDark, nativeW, nativeH);
 
   const scale = Math.min(1, WORK_SIZE / Math.max(nativeW, nativeH));
   const width = Math.round(nativeW * scale);
@@ -349,7 +403,7 @@ async function vectorize(imagePath, outName) {
   let nodes = clusterPoints(rawPoints, CLUSTER_RADIUS);
   console.log(`${outName}: raw junction/endpoint pixels: ${rawPoints.length}, clustered nodes: ${nodes.length}`);
 
-  const rawEdges = traceEdges(skel, width, height, nodes, CLUSTER_RADIUS);
+  const rawEdges = traceEdges(skel, width, height, nodes, TRACE_NODE_RADIUS);
   const seen = new Set();
   let edges = [];
   for (const e of rawEdges) {
