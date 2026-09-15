@@ -1,5 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Canvas, Group, Rect } from '@shopify/react-native-skia';
-import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -19,6 +19,7 @@ import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
+import { fireSolveHapticIfEnabled } from './SettingsScreen';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
 /** Quick-jump targets for the level picker: level 1 plus both sides of every zone boundary. */
@@ -94,9 +95,10 @@ interface PuzzleScreenProps {
   initialLevel: number;
   onLevelChange: (level: number) => void;
   onOpenJourney: () => void;
+  onOpenSettings: () => void;
 }
 
-export default function PuzzleScreen({ initialLevel, onLevelChange, onOpenJourney }: PuzzleScreenProps) {
+export default function PuzzleScreen({ initialLevel, onLevelChange, onOpenJourney, onOpenSettings }: PuzzleScreenProps) {
   const { width, height } = useWindowDimensions();
   // On web, useWindowDimensions can report 0 on the very first render before
   // layout is measured. Since canvas size/graph are seeded once via a
@@ -110,6 +112,7 @@ export default function PuzzleScreen({ initialLevel, onLevelChange, onOpenJourne
       initialLevel={initialLevel}
       onLevelChange={onLevelChange}
       onOpenJourney={onOpenJourney}
+      onOpenSettings={onOpenSettings}
     />
   );
 }
@@ -120,6 +123,7 @@ function PuzzleGame({
   initialLevel,
   onLevelChange,
   onOpenJourney,
+  onOpenSettings,
 }: { width: number; height: number } & PuzzleScreenProps) {
   const viewportMax = Math.max(width, height);
 
@@ -217,7 +221,7 @@ function PuzzleGame({
     setCrossings(newCrossings);
 
     if (newCrossings === 0 && !wasSolved) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      fireSolveHapticIfEnabled();
       pulse.value = withSequence(
         withTiming(1, { duration: 200 }),
         withTiming(0.3, { duration: 250 }),
@@ -387,9 +391,14 @@ function PuzzleGame({
       </GestureDetector>
 
       <View style={styles.overlay}>
-        <Text style={[styles.subtitle, solved && styles.subtitleSolved]}>
-          {solved ? 'Solved!' : `${crossings} crossing${crossings === 1 ? '' : 's'}`}
-        </Text>
+        <View style={styles.leftGroup}>
+          <Pressable style={styles.settingsButton} onPress={onOpenSettings} hitSlop={12}>
+            <Ionicons name="settings-outline" size={20} color={COLORS.subtitle} />
+          </Pressable>
+          <Text style={[styles.subtitle, solved && styles.subtitleSolved]}>
+            {solved ? 'Solved!' : `${crossings} crossing${crossings === 1 ? '' : 's'}`}
+          </Text>
+        </View>
         <View style={styles.buttonRow}>
           <Pressable style={styles.fitButton} onPress={onOpenJourney}>
             <Text style={styles.fitButtonText}>Journey</Text>
@@ -478,6 +487,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 56,
     paddingHorizontal: 20,
+  },
+  leftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingsButton: {
+    backgroundColor: COLORS.overlayBg,
+    padding: 6,
+    borderRadius: 12,
   },
   subtitle: {
     color: COLORS.subtitle,

@@ -14,7 +14,7 @@ This doc is split into phases. Copy one phase at a time into Claude Code, verify
 | 6 - Ads | ✅ Done (interstitial confirmed firing only at zone boundaries, via appetize.io device test) |
 | 7 - Studio splash & app branding | ✅ Done |
 | 8 - Main menu (mode select) | ✅ Done (Badge Challenge shown as disabled "coming soon"; settings gear is a no-op stub until Phase 9) |
-| 9 - Settings screen | ⏳ Not started |
+| 9 - Settings screen | ✅ Done (bug reports need a Web3Forms access key added before they'll actually send — see PR notes) |
 | 10 - Badge Challenge mode | ⏳ Not started |
 | 11 - Journey map rework (bottom-to-top, tap-to-advance, replay) | ⏳ Not started |
 

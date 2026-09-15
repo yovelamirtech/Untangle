@@ -30,3 +30,13 @@ export async function saveProgress(progress: Progress): Promise<void> {
     // Best-effort persistence — losing a save shouldn't crash the game.
   }
 }
+
+/** Wipes journey progress. There's no badge-collection progress to clear yet
+ * (Phase 10) — add it here alongside this once it exists. */
+export async function resetProgress(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Best-effort — if this fails the storage will just be overwritten on next save.
+  }
+}
