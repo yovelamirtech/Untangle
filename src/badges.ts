@@ -1,6 +1,16 @@
 import { segmentsIntersect } from './geometry';
 import { Edge, Graph, Node } from './puzzle';
 
+/** A full planar graph auto-vectorized from reference line art (every
+ * facet edge, not just the silhouette) — see scripts/vectorize-badge.mjs.
+ * Coordinates are in the same 0-100 design grid as `contour`; edges are
+ * index pairs into `nodes`. Used as-is (no resampling), since unlike a
+ * hand-sketched contour its point count already reflects the real shape. */
+export interface BadgeGraph {
+  nodes: [number, number][];
+  edges: [number, number][];
+}
+
 export interface Badge {
   id: string;
   name: string;
@@ -9,13 +19,27 @@ export interface Badge {
   /** Closed-loop contour, hand-authored as a handful of vertices in a 0-100
    * design grid (x right, y down) — resampled to NODE_COUNT evenly-spaced
    * points at puzzle-build time, so the point count is independent of how
-   * many vertices were used to sketch the outline. */
+   * many vertices were used to sketch the outline. Ignored when `graph` is
+   * set. */
   contour: [number, number][];
+  /** When set, used instead of `contour` — the puzzle is this exact
+   * vectorized wireframe rather than a silhouette-plus-triangulation. */
+  graph?: BadgeGraph;
 }
 
-/** How many nodes every badge puzzle has — a lot more than a normal level's
- * 5-30, since the solved shape needs to read as a recognizable silhouette. */
+/** How many nodes a contour-based badge puzzle has — a lot more than a
+ * normal level's 5-30, since the solved shape needs to read as a
+ * recognizable silhouette. A graph-based badge uses its own node count
+ * instead (see getBadgeNodeCount). */
 export const BADGE_NODE_COUNT = 70;
+
+/** The node count a given badge's puzzle will actually have — its
+ * vectorized graph's own node count, or BADGE_NODE_COUNT for a
+ * contour-based badge. Layout code (canvas size, min-crossings target)
+ * should scale off this, not the BADGE_NODE_COUNT constant directly. */
+export function getBadgeNodeCount(badge: Badge): number {
+  return badge.graph ? badge.graph.nodes.length : BADGE_NODE_COUNT;
+}
 
 // Bird in flight, auto-traced from a reference silhouette (flood-filled
 // from the image border to recover the true outline, then simplified) —
@@ -81,52 +105,217 @@ const SHARK_CONTOUR: [number, number][] = [
   [100, 24],
 ];
 
-// Toaster body, auto-traced the same way. The reference art's toast slots,
-// dial, and lettering are interior detail the flood-fill correctly folds
-// into the solid silhouette — this system has no notion of a hole in a
-// badge shape, so the smooth auto-traced box got two hand-added hints of
-// those features instead: a small notch carved into the top edge for the
-// toast slot, and a bump on the right edge for the dial housing.
-const TOASTER_CONTOUR: [number, number][] = [
-  [83.5, 86],
-  [79.9, 86.2],
-  [69.1, 92.3],
-  [57.4, 96.9],
-  [56.8, 98],
-  [52, 100],
-  [48.3, 97.6],
-  [47.6, 96.5],
-  [41.9, 93.3],
-  [24.6, 81.3],
-  [15.8, 74.2],
-  [7.1, 66.1],
-  [3.2, 62.3],
-  [0.9, 57.8],
-  [0.7, 56.5],
-  [0, 22],
-  [1.7, 15.3],
-  [5.6, 9.8],
-  [11.2, 6.1],
-  [20.1, 2.6],
-  [31.1, 0],
-  [32.5, 6], // toast-slot notch, hand-added
-  [34.5, 6], // toast-slot notch, hand-added
-  [36, 0],
-  [61.2, 11.7],
-  [77.7, 20.6],
-  [81.4, 23.2],
-  [86.7, 29.9],
-  [88.3, 34.5],
-  [89.2, 40.1],
-  [94, 52], // dial-housing bump, hand-added
-  [94, 63], // dial-housing bump, hand-added
-  [88.7, 76.1],
-];
+// Toaster body, fully vectorized from the reference line art: every
+// facet edge (not just the outer silhouette), extracted by
+// scripts/vectorize-badge.mjs — skeletonize the thresholded stroke mask,
+// find junctions by crossing number, then trace the skeleton between them.
+// Floating text/labels (the reference art's 'STOP' and dial numbers) sit
+// as islands never touching the wireframe, so they're dropped along with
+// any other small stray marks; nothing here is hand-guessed.
+const TOASTER_GRAPH: BadgeGraph = {
+  nodes: [
+  [30.9, 0],
+  [36.2, 0.2],
+  [24.5, 2.4],
+  [39.5, 2.6],
+  [17.2, 3.5],
+  [49, 5.8],
+  [13.6, 7.1],
+  [7.2, 8.6],
+  [11, 8.7],
+  [9.7, 11.3],
+  [11, 12],
+  [12.8, 13.1],
+  [1.8, 15.4],
+  [75.3, 19.5],
+  [0, 22.2],
+  [77.8, 22.5],
+  [4.2, 22.8],
+  [78.3, 22.6],
+  [74.1, 23.1],
+  [4.3, 23.9],
+  [82.4, 24.1],
+  [85, 29.2],
+  [86.4, 29.2],
+  [45.5, 33.7],
+  [49.2, 34.1],
+  [71.7, 35.3],
+  [76.7, 40.1],
+  [89.5, 40.3],
+  [72.8, 41.2],
+  [89.5, 42.2],
+  [71.2, 42.2],
+  [80.5, 42.2],
+  [53.3, 42.9],
+  [82.2, 43.1],
+  [69.5, 43.6],
+  [82.4, 44.5],
+  [75.2, 46.4],
+  [44.3, 50.4],
+  [81.1, 50.6],
+  [67.5, 50.9],
+  [70.8, 51.3],
+  [72.7, 52.2],
+  [76.9, 52.8],
+  [75.2, 53.1],
+  [0.9, 55.2],
+  [47, 55.7],
+  [89.5, 55.3],
+  [47, 56.8],
+  [67.7, 57.7],
+  [1.5, 58.5],
+  [89.3, 58.5],
+  [67.5, 61.9],
+  [76.7, 63.9],
+  [72.8, 65.8],
+  [80.8, 66.4],
+  [70.8, 66.5],
+  [12, 70.5],
+  [51.3, 71.4],
+  [67.7, 72.4],
+  [52.2, 74.4],
+  [89, 75.5],
+  [20.9, 75.9],
+  [88.6, 76.8],
+  [79.8, 77.3],
+  [25.9, 77.8],
+  [25.2, 78.5],
+  [47, 79.3],
+  [63.5, 81.1],
+  [29, 81.8],
+  [81.3, 82.7],
+  [85.1, 82.7],
+  [83.9, 83.2],
+  [71.8, 84.6],
+  [80.2, 84.6],
+  [46.9, 85],
+  [74.3, 85.9],
+  [61.1, 86.1],
+  [80.5, 86.1],
+  [75.2, 86.6],
+  [71.8, 88.7],
+  [57.6, 92.7],
+  [46.9, 92.7],
+  [48, 93.2],
+  [57.1, 93.9],
+  [52.9, 94.1],
+  [45, 94.9],
+  [60.2, 96],
+  [48.3, 97.1],
+  [52.8, 97.3],
+  [57.1, 97.3],
+  [52.3, 100],
+  ],
+  edges: [
+  [0, 1],
+  [1, 3],
+  [10, 3],
+  [6, 2],
+  [4, 7],
+  [11, 18],
+  [4, 6],
+  [5, 13],
+  [6, 8],
+  [7, 8],
+  [7, 12],
+  [7, 9],
+  [7, 16],
+  [8, 9],
+  [9, 16],
+  [11, 23],
+  [12, 14],
+  [12, 16],
+  [14, 16],
+  [17, 20],
+  [15, 25],
+  [14, 44],
+  [17, 21],
+  [24, 18],
+  [20, 22],
+  [19, 44],
+  [19, 65],
+  [21, 25],
+  [22, 27],
+  [21, 33],
+  [21, 27],
+  [25, 32],
+  [25, 39],
+  [28, 30],
+  [28, 26],
+  [26, 31],
+  [26, 36],
+  [29, 35],
+  [32, 39],
+  [29, 54],
+  [32, 37],
+  [29, 46],
+  [32, 45],
+  [34, 36],
+  [34, 40],
+  [34, 43],
+  [35, 42],
+  [35, 38],
+  [36, 43],
+  [42, 38],
+  [37, 45],
+  [38, 54],
+  [39, 48],
+  [40, 55],
+  [41, 43],
+  [41, 53],
+  [42, 52],
+  [44, 49],
+  [47, 64],
+  [47, 57],
+  [47, 66],
+  [49, 61],
+  [49, 56],
+  [50, 60],
+  [51, 58],
+  [53, 52],
+  [52, 54],
+  [53, 54],
+  [54, 58],
+  [54, 60],
+  [55, 58],
+  [56, 61],
+  [56, 85],
+  [58, 67],
+  [72, 63],
+  [59, 80],
+  [75, 63],
+  [62, 69],
+  [63, 69],
+  [62, 70],
+  [68, 81],
+  [68, 85],
+  [71, 73],
+  [71, 77],
+  [72, 75],
+  [73, 78],
+  [74, 81],
+  [86, 77],
+  [76, 80],
+  [80, 79],
+  [86, 79],
+  [82, 84],
+  [84, 83],
+  [82, 88],
+  [83, 88],
+  [84, 88],
+  [86, 89],
+  [87, 88],
+  [88, 89],
+  [87, 90],
+  [89, 90],
+  [88, 90],
+  ],
+};
 
 export const BADGES: Badge[] = [
   { id: 'bird', name: 'Bird', hint: 'Wings spread, mid-flight', contour: BIRD_CONTOUR },
   { id: 'shark', name: 'Shark', hint: 'Fin above the water', contour: SHARK_CONTOUR },
-  { id: 'toaster', name: 'Toaster', hint: 'Two slots, one dial', contour: TOASTER_CONTOUR },
+  { id: 'toaster', name: 'Toaster', hint: 'Two slots, one dial', contour: [], graph: TOASTER_GRAPH },
   // Butterfly, RTX 5090, Face are planned next — no contour yet, so
   // getBadgeGraph() isn't called for them; the collection screen shows
   // them as "coming soon" instead of opening a puzzle.
@@ -310,7 +499,41 @@ function nearestResampledIndex(resampled: [number, number][], target: [number, n
 /** Builds the badge's solved graph: the resampled outline loop plus a
  * handful of internal triangulation lines (echoing the low-poly reference
  * art), scaled and centered to fill `canvasSize` minus `margin`. */
+function fitPoints(
+  points: [number, number][],
+  canvasSize: number,
+  margin: number
+): { nodes: Node[]; offsetX: number; offsetY: number; fitScale: number; minX: number; minY: number } {
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const shapeWidth = maxX - minX;
+  const shapeHeight = maxY - minY;
+
+  const available = canvasSize - 2 * margin;
+  const fitScale = Math.min(available / shapeWidth, available / shapeHeight);
+  const offsetX = margin + (available - shapeWidth * fitScale) / 2;
+  const offsetY = margin + (available - shapeHeight * fitScale) / 2;
+
+  const nodes: Node[] = points.map(([x, y], id) => ({
+    id,
+    x: offsetX + (x - minX) * fitScale,
+    y: offsetY + (y - minY) * fitScale,
+  }));
+
+  return { nodes, offsetX, offsetY, fitScale, minX, minY };
+}
+
 export function getBadgeSolvedGraph(badge: Badge, canvasSize: number, margin: number): Graph {
+  if (badge.graph) {
+    const { nodes } = fitPoints(badge.graph.nodes, canvasSize, margin);
+    const edges: Edge[] = badge.graph.edges.map(([a, b]) => ({ a, b }));
+    return { nodes, edges };
+  }
+
   const resampled = resampleClosedPolyline(badge.contour, BADGE_NODE_COUNT);
 
   const xs = badge.contour.map(([x]) => x);

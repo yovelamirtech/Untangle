@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-na
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { makeMutable, runOnJS, SharedValue, useDerivedValue, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 
-import { BADGE_NODE_COUNT, getBadge, getBadgeSolvedGraph } from './badges';
+import { getBadge, getBadgeNodeCount, getBadgeSolvedGraph } from './badges';
 import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './badgeProgress';
 import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
@@ -19,7 +19,6 @@ const ADVANCE_DELAY_MS = 1200;
 const CANVAS_MARGIN = 60;
 const DRAG_THROTTLE_UPDATES = 3;
 const DRAG_BOUNDS_PADDING = 24;
-const MIN_CROSSINGS = getMinCrossingsForLevel(BADGE_NODE_COUNT);
 
 const COLORS = {
   background: '#1B1530',
@@ -59,13 +58,15 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
   useEffect(() => {
     if (!badge || !width || !height) return;
     const viewportMax = Math.max(width, height);
-    const canvasSize = getCanvasSize(BADGE_NODE_COUNT, viewportMax);
+    const nodeCount = getBadgeNodeCount(badge);
+    const canvasSize = getCanvasSize(nodeCount, viewportMax);
     const solved = getBadgeSolvedGraph(badge, canvasSize, CANVAS_MARGIN);
+    const minCrossings = getMinCrossingsForLevel(nodeCount);
 
     getSavedNodePositions(badgeId).then((saved) => {
       const graph = saved
         ? applySavedPositions(solved, saved)
-        : scrambleGraphAtLeast(solved, canvasSize, canvasSize, CANVAS_MARGIN, MIN_CROSSINGS, 20);
+        : scrambleGraphAtLeast(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, 20);
       setInitialGraph(graph);
     });
     // Only re-run if the badge or viewport actually changes — not on every render.
@@ -106,7 +107,10 @@ function BadgeGame({
   onSolved: () => void;
 }) {
   const viewportMax = Math.max(width, height);
-  const canvasSize = useMemo(() => getCanvasSize(BADGE_NODE_COUNT, viewportMax), [viewportMax]);
+  const canvasSize = useMemo(
+    () => getCanvasSize(initialGraph.nodes.length, viewportMax),
+    [viewportMax, initialGraph.nodes.length]
+  );
 
   const [graph] = useState(initialGraph);
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
