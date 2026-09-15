@@ -1,0 +1,28 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Untangle app icon</title>
+<desc>Six pale-blue nodes connected by thin lines forming a clean, non-crossing loop on a soft sky-blue circular background — the game's "solved" state as a mark.</desc>
+
+<circle cx="256" cy="256" r="256" fill="#EAF4FF"/>
+<circle cx="256" cy="256" r="196" fill="#4E93D9" opacity="0.08"/>
+<circle cx="256" cy="256" r="150" fill="#4E93D9" opacity="0.10"/>
+
+<!-- Untangled rope: a closed, non-crossing loop through 6 points -->
+<path
+  d="M 256 120 C 340 132, 388 180, 392 256 C 388 332, 340 380, 256 392 C 172 380, 124 332, 120 256 C 124 180, 172 132, 256 120 Z"
+  fill="none"
+  stroke="#8BADD1"
+  stroke-width="10"
+  stroke-linecap="round"
+/>
+
+<!-- an inner chord to hint at the puzzle's connective lines, still non-crossing -->
+<path d="M 256 120 L 256 392" stroke="#8BADD1" stroke-width="8" stroke-linecap="round" opacity="0.55"/>
+
+<!-- nodes -->
+<circle cx="256" cy="120" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
+<circle cx="392" cy="256" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
+<circle cx="256" cy="392" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
+<circle cx="120" cy="256" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
+<circle cx="256" cy="256" r="16" fill="#F2934F"/>
+
+</svg>
