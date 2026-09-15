@@ -11,7 +11,7 @@ This doc is split into 6 phases. Copy one phase at a time into Claude Code, veri
 | 3 - Dragging + solve detection | ✅ Done |
 | 4 - Visual & feel polish | ✅ Done |
 | 5 - Journey map & progress | ✅ Done |
-| 6 - Ads | 🔧 Implemented, awaiting test on a dev build (not testable in Expo Go) |
+| 6 - Ads | ✅ Done (interstitial confirmed firing only at zone boundaries, via appetize.io device test) |
 
 **Before you start work on any phase, read this table to know where the project stands. After finishing a phase, update its row here before you stop.**
 
