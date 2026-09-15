@@ -26,6 +26,7 @@ This doc is split into phases. Copy one phase at a time into Claude Code, verify
 
 - `assets/stutio_logo/` — the studio's own logo (Yovlez Studio), in three variants: `icon-primary.svg` (with cartridge notch, use for the splash fade), `icon-appstore.svg` (plain square), `wordmark.svg` (icon + "Yovlez STUDIO" text). Note the folder name has a typo (`stutio` not `studio`) — kept as-is unless told to rename it, since renaming means updating every import.
 - `assets/game_logo/` — a first draft of the Untangle game's own mark (separate from the studio logo): `icon-main.svg` (circular icon: a closed, non-crossing loop of pale-blue nodes on a sky-blue background, in the game's existing "sky cotton" palette from `src/palette.ts`) and `wordmark.svg` (same mark + "Untangle" text). Treat this as a starting point for phase 8, not a final asset — feel free to iterate on it with the user before locking it in as the real app icon.
+  - **Planned follow-up (not yet requested as a task):** the user wants to eventually swap this generic mark for the icon/silhouette of one of the Badge Challenge badges (phase 10) once those exist — ask before doing this, don't do it proactively.
 
 ---
 
