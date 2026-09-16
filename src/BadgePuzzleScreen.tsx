@@ -9,7 +9,7 @@ import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './b
 import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { countCrossings, Graph, Node, scrambleGraphAtLeast } from './puzzle';
+import { countCrossings, Graph, Node, scrambleBadgeGraph } from './puzzle';
 import { clampTranslate, getCanvasSize, getFitCamera } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 
@@ -62,15 +62,12 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
     const canvasSize = getCanvasSize(nodeCount, viewportMax);
     const solved = getBadgeSolvedGraph(badge, canvasSize, CANVAS_MARGIN);
     const minCrossings = getMinCrossingsForLevel(nodeCount);
-    // A badge graph (up to a few hundred nodes) is far denser than a normal
-    // level, so an independent random scatter can blow well past this on
-    // the very first attempt — see scrambleGraphAtLeast's maxCrossings.
     const maxCrossings = minCrossings * 2;
 
     getSavedNodePositions(badgeId).then((saved) => {
       const graph = saved
         ? applySavedPositions(solved, saved)
-        : scrambleGraphAtLeast(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, 20, maxCrossings);
+        : scrambleBadgeGraph(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, maxCrossings);
       setInitialGraph(graph);
     });
     // Only re-run if the badge or viewport actually changes — not on every render.
