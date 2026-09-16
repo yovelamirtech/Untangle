@@ -545,7 +545,25 @@ function curveSimplify(nodes, edges, epsilon) {
   const outNodes = nodes.slice();
   const outEdges = [];
   for (const e of edges) {
-    const ordered = orderPathPixels(e.path ?? []);
+    let ordered = orderPathPixels(e.path ?? []);
+    // orderPathPixels only knows the arc's own pixels, not which of its two
+    // ends belongs to node a vs b — half the time it comes back reversed,
+    // and prepending/appending nodes[e.a]/nodes[e.b] without checking turns
+    // the path into a jump-and-double-back shape (A, then a long hop to the
+    // far end near B, back along the arc to the end near A, then another
+    // hop to B) that RDP then "simplifies" into a spurious zigzag cutting
+    // across the real art, instead of the actual curve.
+    if (ordered.length > 0) {
+      const [fx, fy] = ordered[0];
+      const [lx, ly] = ordered[ordered.length - 1];
+      const [ax, ay] = nodes[e.a];
+      const [bx, by] = nodes[e.b];
+      const distToA = Math.hypot(fx - ax, fy - ay);
+      const distToB = Math.hypot(lx - bx, ly - by);
+      const distToAIfReversed = Math.hypot(lx - ax, ly - ay);
+      const distToBIfReversed = Math.hypot(fx - bx, fy - by);
+      if (distToAIfReversed + distToBIfReversed < distToA + distToB) ordered = ordered.slice().reverse();
+    }
     const full = [nodes[e.a], ...ordered, nodes[e.b]];
     const simplified = rdpSimplify(full, epsilon);
     let prevIndex = e.a;
