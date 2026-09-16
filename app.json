@@ -30,6 +30,15 @@
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
         }
       ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#EAF4FF"
+        }
+      ]
     ],
     "extra": {
       "eas": {

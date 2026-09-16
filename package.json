@@ -4,11 +4,14 @@
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.15",
+    "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.22",
+    "expo-constants": "~57.0.18",
     "expo-dev-client": "~57.0.19",
     "expo-haptics": "~57.0.3",
+    "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -24,6 +27,7 @@
     "@expo/ngrok": "^4.1.3",
     "@types/react": "~19.2.2",
     "babel-preset-expo": "^57.0.11",
+    "sharp": "^0.35.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
