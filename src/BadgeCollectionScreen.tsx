@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Line } from 'react-native-svg';
 
-import { Badge, BADGES } from './badges';
+import { Badge, BADGES, getBadgeSolvedGraph } from './badges';
 import { BadgeProgress, BadgeStatus, getBadgeStatus, loadBadgeProgress } from './badgeProgress';
 
 const COLORS = {
@@ -14,6 +15,7 @@ const COLORS = {
   cardBorder: 'rgba(228,219,250,0.15)',
   solved: '#7FD9B9',
   inProgress: '#F6A8B8',
+  thumbnailLine: 'rgba(228,219,250,0.85)',
 };
 
 interface BadgeCollectionScreenProps {
@@ -27,6 +29,27 @@ function statusLabel(status: BadgeStatus): string | null {
   return null;
 }
 
+const THUMBNAIL_SIZE = 84;
+const THUMBNAIL_MARGIN = 6;
+
+/** The badge's own solved shape, small and static — what you're trying to
+ * untangle it into isn't a secret, so show it up front rather than making
+ * the player guess from a hint alone. */
+function BadgeThumbnail({ badge }: { badge: Badge }) {
+  const graph = useMemo(() => getBadgeSolvedGraph(badge, THUMBNAIL_SIZE, THUMBNAIL_MARGIN), [badge]);
+  const nodeById = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
+
+  return (
+    <Svg width={THUMBNAIL_SIZE} height={THUMBNAIL_SIZE} viewBox={`0 0 ${THUMBNAIL_SIZE} ${THUMBNAIL_SIZE}`}>
+      {graph.edges.map((edge, i) => {
+        const from = nodeById.get(edge.a)!;
+        const to = nodeById.get(edge.b)!;
+        return <Line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={COLORS.thumbnailLine} strokeWidth={1.2} />;
+      })}
+    </Svg>
+  );
+}
+
 function BadgeCard({ badge, status, onPress }: { badge: Badge; status: BadgeStatus; onPress: () => void }) {
   const playable = badge.contour.length > 0 || badge.graph !== undefined;
   const label = statusLabel(status);
@@ -37,7 +60,8 @@ function BadgeCard({ badge, status, onPress }: { badge: Badge; status: BadgeStat
       onPress={playable ? onPress : undefined}
       disabled={!playable}
     >
-      <Text style={styles.cardTitle}>{status === 'solved' ? badge.name : playable ? '?' : badge.name}</Text>
+      {playable && <BadgeThumbnail badge={badge} />}
+      <Text style={styles.cardTitle}>{badge.name}</Text>
       <Text style={[styles.cardHint, !playable && styles.cardHintDisabled]}>
         {playable ? badge.hint : 'Coming soon'}
       </Text>
