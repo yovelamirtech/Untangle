@@ -38,10 +38,19 @@ interface NodeValue {
   y: SharedValue<number>;
 }
 
+/** A saved position's node id is only meaningful for the exact graph
+ * shape it was saved from — if a badge's node count ever changes (a data
+ * fix, a re-vectorization), old ids no longer line up with the same
+ * physical points, and overlaying them would scatter the wrong (id, x, y)
+ * pairs onto the new graph instead of leaving something recognizable.
+ * Discarding a mismatched save falls back to a fresh scramble, same as
+ * having no save at all. */
 function applySavedPositions(graph: Graph, saved: Node[] | undefined): Graph {
-  if (!saved) return graph;
+  if (!saved || saved.length !== graph.nodes.length) return graph;
   const byId = new Map(saved.map((n) => [n.id, n]));
-  return { edges: graph.edges, nodes: graph.nodes.map((n) => byId.get(n.id) ?? n) };
+  const nodes = graph.nodes.map((n) => byId.get(n.id) ?? n);
+  if (nodes.some((n) => !byId.has(n.id))) return graph;
+  return { edges: graph.edges, nodes };
 }
 
 interface BadgePuzzleScreenProps {

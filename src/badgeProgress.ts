@@ -2,7 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Node } from './puzzle';
 
-const STORAGE_KEY = 'untangle:badgeProgress:v1';
+// Bumped to v2: badge graphs were restructured (every graph-based badge is
+// now a single linearized line — see singleLineify) and rtx5090's data was
+// regenerated outright, so a v1 save's node ids no longer line up with the
+// same physical points on the new graph. Loading it via applySavedPositions
+// would silently scatter the wrong old (id, x, y) pairs onto the new
+// nodes — not a fresh scramble, just a garbled one that never looked like
+// the badge at all. Bumping the key orphans old saves so they're never
+// read, instead of rendering that garbled state.
+const STORAGE_KEY = 'untangle:badgeProgress:v2';
 
 export type BadgeStatus = 'not-started' | 'in-progress' | 'solved';
 
