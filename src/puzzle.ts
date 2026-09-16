@@ -184,7 +184,7 @@ function shoelaceArea(boundary: number[], byId: Map<number, Node>): number {
  * to be part of, which is what we want: the fans' own rims are a separate
  * inner detail, not part of the card's outer silhouette.
  */
-function traceOuterBoundaryIds(graph: Graph): Set<number> {
+export function traceOuterBoundaryIds(graph: Graph): Set<number> {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const adjacency = new Map<number, number[]>();
   for (const n of graph.nodes) adjacency.set(n.id, []);
@@ -229,8 +229,9 @@ function traceOuterBoundaryIds(graph: Graph): Set<number> {
 
 /**
  * Scrambles a badge graph while keeping its recognizable silhouette
- * intact: nodes on the solved shape's outer boundary are pinned exactly
- * where they belong, and only the interior nodes are jittered — the
+ * intact: nodes in `movableIds` (the badge's interior — see
+ * badges.ts's getBadgeSolvedGraph) are jittered from their solved
+ * position, and every other node is pinned exactly where it belongs — the
  * puzzle looks like the badge from the very first frame, tangled only in
  * the lines running through its middle, rather than scrambled into an
  * unrecognizable scatter the way a normal level's rope is.
@@ -241,11 +242,9 @@ export function scrambleBadgeGraph(
   height: number,
   margin: number,
   minCrossings: number,
-  maxCrossings: number
+  maxCrossings: number,
+  movableIds: Set<number>
 ): Graph {
-  const boundaryIds = traceOuterBoundaryIds(graph);
-  const interiorIds = graph.nodes.map((n) => n.id).filter((id) => !boundaryIds.has(id));
-
   // A badge built by triangulating a hand-sketched outline (bird, shark —
   // see badges.ts) has no nodes but the outline itself: every one of them
   // is "on the boundary", so there's nothing left to jitter and the
@@ -254,13 +253,13 @@ export function scrambleBadgeGraph(
   // staying crisp, but it's still recognizable and there's an actual
   // puzzle to solve, unlike scrambling the whole canvas (see
   // scrambleGraphAtLeast) or not scrambling at all.
-  if (interiorIds.length === 0) {
+  if (movableIds.size === 0) {
     const allIds = new Set(graph.nodes.map((n) => n.id));
     const maxRadius = Math.max(width, height) * 0.2;
     return scrambleGraphByJitterRadius(graph, width, height, margin, minCrossings, maxCrossings, allIds, maxRadius);
   }
 
-  return scrambleGraphByJitterRadius(graph, width, height, margin, minCrossings, maxCrossings, new Set(interiorIds));
+  return scrambleGraphByJitterRadius(graph, width, height, margin, minCrossings, maxCrossings, movableIds);
 }
 
 /**

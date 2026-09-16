@@ -60,14 +60,14 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
     const viewportMax = Math.max(width, height);
     const nodeCount = getBadgeNodeCount(badge);
     const canvasSize = getCanvasSize(nodeCount, viewportMax);
-    const solved = getBadgeSolvedGraph(badge, canvasSize, CANVAS_MARGIN);
+    const { graph: solved, interiorIds } = getBadgeSolvedGraph(badge, canvasSize, CANVAS_MARGIN);
     const minCrossings = getMinCrossingsForLevel(nodeCount);
     const maxCrossings = minCrossings * 2;
 
     getSavedNodePositions(badgeId).then((saved) => {
       const graph = saved
         ? applySavedPositions(solved, saved)
-        : scrambleBadgeGraph(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, maxCrossings);
+        : scrambleBadgeGraph(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, maxCrossings, interiorIds);
       setInitialGraph(graph);
     });
     // Only re-run if the badge or viewport actually changes — not on every render.

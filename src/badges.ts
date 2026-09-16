@@ -1,5 +1,6 @@
 import { segmentsIntersect } from './geometry';
-import { Edge, Graph, Node } from './puzzle';
+import { Edge, Graph, Node, traceOuterBoundaryIds } from './puzzle';
+import { singleLineify } from './singleLine';
 
 /** A full planar graph auto-vectorized from reference line art (every
  * facet edge, not just the silhouette) — see scripts/vectorize-badge.mjs.
@@ -392,38 +393,34 @@ const TOASTER_GRAPH: BadgeGraph = {
 
 // Butterfly, fully vectorized from the reference line art the same way as
 // the toaster — symmetric wings each split into facets around a central
-// body spike.
+// body spike. The raw trace placed two junction pixels a couple of units
+// apart at each antenna tip instead of one (a skeletonization artifact,
+// not a real fork in the art); left alone, each spawned its own edge to a
+// different far wingtip, and those two edges crossed each other right at
+// the badge's own "solved" layout. Fixed by merging every pair of nodes
+// within 2 units of each other (in this 0-100 grid) into one, which is
+// where this data now already sits — see scripts/vectorize-badge.mjs's
+// clusterPoints for the equivalent step in a fresh trace.
 const BUTTERFLY_GRAPH: BadgeGraph = {
   nodes: [
-    [100, 0],
-    [0, 0.3],
-    [1.1, 0.5],
-    [98.9, 0.5],
+    [99.5, 0.3],
+    [0.6, 0.4],
     [31.5, 9.1],
     [68.5, 9.1],
     [5.3, 20.7],
     [94.6, 20.7],
-    [30.3, 25.3],
-    [69.7, 25.3],
-    [30.9, 25.7],
-    [69.1, 25.7],
-    [16.8, 35.7],
-    [17.9, 35.7],
-    [82.1, 35.7],
-    [83, 35.7],
-    [46.7, 37.3],
-    [53.1, 37.4],
-    [46.8, 38],
-    [53, 38.2],
+    [30.6, 25.5],
+    [69.4, 25.5],
+    [17.4, 35.7],
+    [82.6, 35.7],
+    [46.8, 37.7],
+    [53.1, 37.8],
     [44.2, 38.6],
     [55.6, 38.6],
     [46.9, 44.1],
     [52.9, 44.1],
-    [8.2, 44.7],
-    [91.8, 44.7],
-    [7.5, 45.1],
-    [8, 45.1],
-    [91.9, 45.1],
+    [7.9, 45],
+    [91.9, 44.9],
     [50, 55.7],
     [29.1, 56],
     [70.7, 56],
@@ -433,12 +430,12 @@ const BUTTERFLY_GRAPH: BadgeGraph = {
     [85.1, 68.9],
   ],
   edges: [
-    [1, 4], [5, 0], [2, 1], [0, 3], [2, 4], [5, 3], [0, 7], [1, 6],
-    [3, 9], [2, 8], [4, 16], [17, 5], [6, 8], [7, 9], [6, 12], [7, 15],
-    [10, 16], [17, 11], [10, 13], [11, 14], [16, 17], [13, 20], [21, 14],
-    [12, 24], [15, 25], [18, 20], [18, 22], [19, 21], [19, 23], [24, 20],
-    [21, 25], [22, 32], [22, 29], [23, 33], [23, 29], [27, 30], [28, 31],
-    [26, 34], [30, 32], [33, 31], [30, 34], [31, 35], [33, 35], [32, 34],
+    [1, 2], [3, 0], [0, 5], [1, 4], [0, 7], [1, 6], [2, 10], [11, 3],
+    [4, 6], [5, 7], [4, 8], [5, 9], [6, 10], [11, 7], [6, 8], [7, 9],
+    [10, 11], [8, 12], [13, 9], [8, 16], [9, 17], [10, 12], [10, 14],
+    [11, 13], [11, 15], [16, 12], [13, 17], [14, 21], [14, 18], [15, 22],
+    [15, 18], [16, 19], [17, 20], [16, 23], [19, 21], [22, 20], [19, 23],
+    [20, 24], [22, 24], [21, 23],
   ],
 };
 
@@ -824,7 +821,15 @@ export const BADGES: Badge[] = [
   { id: 'shark', name: 'Shark', hint: 'Fin above the water', contour: SHARK_CONTOUR },
   { id: 'toaster', name: 'Toaster', hint: 'Two slots, one dial', contour: [], graph: TOASTER_GRAPH },
   { id: 'butterfly', name: 'Butterfly', hint: 'Two wings, symmetric', contour: [], graph: BUTTERFLY_GRAPH },
-  { id: 'rtx5090', name: 'RTX 5090', hint: 'Three fans, one card', contour: [], graph: RTX5090_GRAPH },
+  // RTX5090_GRAPH's own "solved" layout has ~90 pairs of edges that cross
+  // each other — not the near-duplicate-junction artifact butterfly had
+  // (see BUTTERFLY_GRAPH's comment), but genuinely mis-traced edges (long
+  // spurious chords cutting across real detail), which a puzzle can never
+  // be dragged back out of. Pulled from the collection ("Coming soon",
+  // like face) until it can be re-vectorized from its source image — not
+  // in the repo, so scripts/vectorize-badge.mjs can't be re-run on it
+  // here — rather than ship a badge nobody can ever solve.
+  { id: 'rtx5090', name: 'RTX 5090', hint: 'Coming soon', contour: [] },
   // Face is planned next — no contour yet, so getBadgeGraph() isn't called
   // for it; the collection screen shows it as "coming soon" instead of
   // opening a puzzle.
@@ -1034,11 +1039,29 @@ function fitPoints(
   return { nodes, offsetX, offsetY, fitScale, minX, minY };
 }
 
-export function getBadgeSolvedGraph(badge: Badge, canvasSize: number, margin: number): Graph {
+/**
+ * A badge's solved layout, plus which of its nodes are safe to jitter when
+ * scrambling — its interior, as opposed to the outer silhouette that has
+ * to stay put so the puzzle reads as the badge from the first frame (see
+ * puzzle.ts's scrambleBadgeGraph). The returned graph is always a single
+ * line (or a few, if the source art has genuinely disconnected pieces —
+ * see singleLineify): the outer boundary is traced on the real branching
+ * wireframe first, since a linearized path has no junctions left to trace
+ * a boundary through, and then carried over onto the linearized graph via
+ * each new node's original id.
+ */
+export function getBadgeSolvedGraph(badge: Badge, canvasSize: number, margin: number): { graph: Graph; interiorIds: Set<number> } {
   if (badge.graph) {
     const { nodes } = fitPoints(badge.graph.nodes, canvasSize, margin);
     const edges: Edge[] = badge.graph.edges.map(([a, b]) => ({ a, b }));
-    return { nodes, edges };
+    const rawGraph: Graph = { nodes, edges };
+
+    const boundaryIds = traceOuterBoundaryIds(rawGraph);
+    const { graph, sourceIds } = singleLineify(rawGraph);
+    const interiorIds = new Set(
+      graph.nodes.map((n) => n.id).filter((id) => !boundaryIds.has(sourceIds[id]))
+    );
+    return { graph, interiorIds };
   }
 
   const resampled = resampleClosedPolyline(badge.contour, BADGE_NODE_COUNT);
@@ -1090,5 +1113,12 @@ export function getBadgeSolvedGraph(badge: Badge, canvasSize: number, margin: nu
     edges.push({ a, b });
   }
 
-  return { nodes, edges };
+  // The whole outline is the "boundary" here — a hand-sketched contour has
+  // no nodes that aren't on it, only a few diagonals cutting across the
+  // middle, so there's no interior to report; scrambleBadgeGraph falls
+  // back to its bounded whole-graph jitter for these. Still linearized
+  // into a single line (or two, at a diagonal's endpoints) for the same
+  // reason as a fully vectorized badge — see singleLineify.
+  const { graph } = singleLineify({ nodes, edges });
+  return { graph, interiorIds: new Set() };
 }

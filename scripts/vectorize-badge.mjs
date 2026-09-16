@@ -52,7 +52,16 @@ const WORK_SIZE = 1000;
 // for them; a curved single-line drawing (a portrait, a swept fan blade)
 // gets extra nodes exactly where it bends enough to matter.
 const CURVE_EPSILON = 6;
-const CLUSTER_RADIUS = 3;
+// Overridable per-image (VECTORIZE_CLUSTER_RADIUS): the butterfly badge's
+// committed data turned out to have two junction pixels ~15px apart at
+// each antenna tip that this default radius didn't merge — each spawned
+// its own edge to a different far wingtip, and those two edges crossed
+// right in the badge's own "solved" layout (fixed by hand in badges.ts;
+// see BUTTERFLY_GRAPH's comment). Raising this only helps if the same
+// artifact shows up in a fresh trace — it isn't raised by default because
+// TRACE_NODE_RADIUS below depends on it staying small, to avoid erasing
+// real short connecting segments between two genuinely close vertices.
+const CLUSTER_RADIUS = Number(process.env.VECTORIZE_CLUSTER_RADIUS || 3);
 // Deliberately smaller than CLUSTER_RADIUS: traceEdges erases a disc of
 // this radius around each node to isolate the arcs between them. Erasing
 // at the full cluster radius wiped out short-but-real connecting segments

@@ -36,7 +36,7 @@ const THUMBNAIL_MARGIN = 6;
  * untangle it into isn't a secret, so show it up front rather than making
  * the player guess from a hint alone. */
 function BadgeThumbnail({ badge }: { badge: Badge }) {
-  const graph = useMemo(() => getBadgeSolvedGraph(badge, THUMBNAIL_SIZE, THUMBNAIL_MARGIN), [badge]);
+  const graph = useMemo(() => getBadgeSolvedGraph(badge, THUMBNAIL_SIZE, THUMBNAIL_MARGIN).graph, [badge]);
   const nodeById = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph]);
 
   return (
