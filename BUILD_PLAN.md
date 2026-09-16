@@ -15,7 +15,7 @@ This doc is split into phases. Copy one phase at a time into Claude Code, verify
 | 7 - Studio splash & app branding | ✅ Done |
 | 8 - Main menu (mode select) | ✅ Done (Badge Challenge shown as disabled "coming soon"; settings gear is a no-op stub until Phase 9) |
 | 9 - Settings screen | ✅ Done (bug reports need a Web3Forms access key added before they'll actually send — see PR notes) |
-| 10 - Badge Challenge mode | 🟡 In progress — infra + Bird/Fish badges done, 4 more (Toaster/Butterfly/RTX 5090/Face) pending confirmation |
+| 10 - Badge Challenge mode | 🟡 In progress — Bird/Shark/Toaster/Butterfly/RTX 5090 confirmed working (each a single continuous line, outer silhouette pinned, interior tangled); Face still pending (no clean vectorization yet) |
 | 11 - Journey map rework (bottom-to-top, tap-to-advance, replay) | ⏳ Not started |
 
 **Before you start work on any phase, read this table to know where the project stands. After finishing a phase, update its row here before you stop.**
