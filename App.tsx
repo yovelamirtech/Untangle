@@ -29,6 +29,10 @@ export default function App() {
   // Where "Back" from Settings should return to — it can be opened from
   // either the main menu or from inside a game screen.
   const screenBeforeSettings = useRef<Screen>('menu');
+  // Where "Back" from the Journey path should return to — it can be opened
+  // from the main menu (no game in progress to return to) or from inside a
+  // game screen (via its own "Journey" button).
+  const screenBeforeJourney = useRef<Screen>('menu');
 
   useEffect(() => {
     loadProgress().then((progress) => setFurthestLevel(progress.furthestLevel));
@@ -54,6 +58,11 @@ export default function App() {
   const openSettings = useCallback(() => {
     screenBeforeSettings.current = screen;
     setScreen('settings');
+  }, [screen]);
+
+  const openJourney = useCallback(() => {
+    screenBeforeJourney.current = screen;
+    setScreen('journey');
   }, [screen]);
 
   const handleResetProgress = useCallback(async () => {
@@ -85,7 +94,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       {screen === 'menu' && (
         <MainMenuScreen
-          onSelectJourney={() => setScreen('game')}
+          onSelectJourney={openJourney}
           onSelectBadgeChallenge={() => setScreen('badges')}
           onOpenSettings={openSettings}
         />
@@ -113,12 +122,18 @@ export default function App() {
         <PuzzleScreen
           initialLevel={furthestLevel}
           onLevelChange={handleLevelChange}
-          onOpenJourney={() => setScreen('journey')}
+          onOpenJourney={openJourney}
           onOpenSettings={openSettings}
           onExitToMenu={() => setScreen('menu')}
         />
       )}
-      {screen === 'journey' && <JourneyScreen furthestLevel={furthestLevel} onClose={() => setScreen('game')} />}
+      {screen === 'journey' && (
+        <JourneyScreen
+          furthestLevel={furthestLevel}
+          onClose={() => setScreen(screenBeforeJourney.current)}
+          onPlay={() => setScreen('game')}
+        />
+      )}
       <StatusBar style={screen === 'game' ? 'dark' : 'light'} />
     </GestureHandlerRootView>
   );

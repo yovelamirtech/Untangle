@@ -15,7 +15,7 @@ This doc is split into phases. Copy one phase at a time into Claude Code, verify
 | 7 - Studio splash & app branding | ✅ Done |
 | 8 - Main menu (mode select) | ✅ Done (Badge Challenge shown as disabled "coming soon"; settings gear is a no-op stub until Phase 9) |
 | 9 - Settings screen | ✅ Done (bug reports need a Web3Forms access key added before they'll actually send — see PR notes) |
-| 10 - Badge Challenge mode | 🟡 In progress — Bird/Shark/Toaster/Butterfly/RTX 5090 confirmed working (each a single continuous line, outer silhouette pinned, interior tangled); Face still pending (no clean vectorization yet) |
+| 10 - Badge Challenge mode | 🟡 In progress — Bird/Shark/Toaster/Butterfly/RTX 5090 confirmed working (each a single continuous line, outer silhouette pinned, interior tangled); Face on hold — `assets/example_photos_for_badges/face.jpg` is only 228×350px and mixes thin low-poly facet lines with bold accent strokes (eyebrow/eye/nose/lips/jaw) that `scripts/vectorize-badge.mjs`'s single darkness threshold can't tell apart, plus a floating hair-curl near the temple that never touches the main mesh. Auto-tracing as-is drops real detail (two multi-way junctions near the eye and mouth get flagged ambiguous and dropped) even after loosening spur-pruning and junction-clustering. User decided (2026-09-16) to leave Face for later rather than hand-simplify or fall back to contour-only — revisit with a better source image next session. |
 | 11 - Journey map rework (bottom-to-top, tap-to-advance, replay) | ⏳ Not started |
 
 **Before you start work on any phase, read this table to know where the project stands. After finishing a phase, update its row here before you stop.**

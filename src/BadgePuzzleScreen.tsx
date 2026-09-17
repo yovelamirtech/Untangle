@@ -10,13 +10,12 @@ import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, Graph, Node, scrambleBadgeGraph } from './puzzle';
-import { clampTranslate, getCanvasSize, getFitCamera } from './puzzleLayout';
+import { BADGE_CANVAS_MARGIN_FRACTION, clampTranslate, getBadgeCanvasSize, getFitCamera } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 
 const NODE_RADIUS = 5;
 const HIT_RADIUS_SCREEN = 32;
 const ADVANCE_DELAY_MS = 1200;
-const CANVAS_MARGIN = 60;
 const DRAG_THROTTLE_UPDATES = 3;
 const DRAG_BOUNDS_PADDING = 24;
 
@@ -68,15 +67,16 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
     if (!badge || !width || !height) return;
     const viewportMax = Math.max(width, height);
     const nodeCount = getBadgeNodeCount(badge);
-    const canvasSize = getCanvasSize(nodeCount, viewportMax);
-    const { graph: solved, interiorIds } = getBadgeSolvedGraph(badge, canvasSize, CANVAS_MARGIN);
+    const canvasSize = getBadgeCanvasSize(nodeCount, viewportMax);
+    const margin = canvasSize * BADGE_CANVAS_MARGIN_FRACTION;
+    const { graph: solved, interiorIds } = getBadgeSolvedGraph(badge, canvasSize, margin);
     const minCrossings = getMinCrossingsForLevel(nodeCount);
     const maxCrossings = minCrossings * 2;
 
     getSavedNodePositions(badgeId).then((saved) => {
       const graph = saved
         ? applySavedPositions(solved, saved)
-        : scrambleBadgeGraph(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, maxCrossings, interiorIds);
+        : scrambleBadgeGraph(solved, canvasSize, canvasSize, margin, minCrossings, maxCrossings, interiorIds);
       setInitialGraph(graph);
     });
     // Only re-run if the badge or viewport actually changes — not on every render.
@@ -118,9 +118,15 @@ function BadgeGame({
 }) {
   const viewportMax = Math.max(width, height);
   const canvasSize = useMemo(
-    () => getCanvasSize(initialGraph.nodes.length, viewportMax),
+    () => getBadgeCanvasSize(initialGraph.nodes.length, viewportMax),
     [viewportMax, initialGraph.nodes.length]
   );
+  const margin = canvasSize * BADGE_CANVAS_MARGIN_FRACTION;
+  // The camera fits to the drawing's own footprint (canvas minus margin),
+  // not the whole huge canvas — otherwise the badge would open as a speck
+  // in the middle of a mostly-empty screen instead of "starting in the
+  // middle" already zoomed in on it.
+  const focusSize = canvasSize - 2 * margin;
 
   const [graph] = useState(initialGraph);
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
@@ -135,7 +141,7 @@ function BadgeGame({
   const crossingsRef = useRef(crossings);
   const solvedRef = useRef(crossings === 0);
 
-  const initialCamera = getFitCamera(canvasSize, width, height);
+  const initialCamera = getFitCamera(canvasSize, width, height, focusSize);
   const scale = useSharedValue(initialCamera.scale);
   const savedScale = useSharedValue(initialCamera.scale);
   const translateX = useSharedValue(initialCamera.translateX);
@@ -151,12 +157,12 @@ function BadgeGame({
   const pinchFocalCanvasY = useSharedValue(0);
 
   const resetCamera = useCallback(() => {
-    const target = getFitCamera(canvasSize, width, height);
+    const target = getFitCamera(canvasSize, width, height, focusSize);
     scale.value = withTiming(target.scale);
     translateX.value = withTiming(target.translateX);
     translateY.value = withTiming(target.translateY);
     savedScale.value = target.scale;
-  }, [canvasSize, width, height, scale, savedScale, translateX, translateY]);
+  }, [canvasSize, focusSize, width, height, scale, savedScale, translateX, translateY]);
 
   const persistPositions = useCallback(() => {
     if (solvedRef.current) return;
