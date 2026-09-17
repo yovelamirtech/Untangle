@@ -17,7 +17,7 @@ function PuzzleEdge({ fromX, fromY, toX, toY, pulse, lineWidth, color }: Props) 
   const p2 = useDerivedValue(() => vec(toX.value, toY.value), [toX, toY]);
   const strokeWidth = useDerivedValue(() => lineWidth.value + pulse.value * 3, [lineWidth, pulse]);
 
-  return <Line p1={p1} p2={p2} color={color} style="stroke" strokeWidth={strokeWidth} />;
+  return <Line p1={p1} p2={p2} color={color} style="stroke" strokeWidth={strokeWidth} strokeCap="round" />;
 }
 
 export default memo(PuzzleEdge);

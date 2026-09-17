@@ -5,14 +5,21 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 // via scripts/generate-icons.mjs — re-run that script if the source SVG changes.
 const WORDMARK = require('../assets/game-logo-wordmark.png');
 
+// Matches the dark-violet identity used everywhere outside of gameplay
+// itself (JourneyScreen, SettingsScreen, BadgeCollectionScreen,
+// BadgePuzzleScreen) — gameplay screens rotate through the pastel level
+// palettes (see palette.ts), but the app's own hub screens share this one
+// look, so the main menu should too instead of borrowing a level palette.
 const COLORS = {
-  background: '#EAF4FF',
-  title: '#2B4A6B',
-  journeyButton: '#4E93D9',
-  journeyButtonText: '#FFFFFF',
-  badgeButton: 'rgba(78,147,217,0.16)',
-  badgeButtonText: '#2B4A6B',
-  gearIcon: '#2B4A6B',
+  background: '#1B1530',
+  title: '#E4DBFA',
+  journeyButton: '#F6A8B8',
+  journeyButtonText: '#241B38',
+  badgeButton: 'rgba(228,219,250,0.1)',
+  badgeButtonBorder: 'rgba(228,219,250,0.25)',
+  badgeButtonText: '#E4DBFA',
+  gearIcon: '#E4DBFA',
+  gearButtonBg: 'rgba(0,0,0,0.35)',
 };
 
 interface MainMenuScreenProps {
@@ -55,6 +62,9 @@ const styles = StyleSheet.create({
     top: 56,
     left: 20,
     zIndex: 1,
+    backgroundColor: COLORS.gearButtonBg,
+    padding: 8,
+    borderRadius: 14,
   },
   content: {
     flex: 1,
@@ -79,6 +89,11 @@ const styles = StyleSheet.create({
   },
   journeyButton: {
     backgroundColor: COLORS.journeyButton,
+    shadowColor: COLORS.journeyButton,
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   journeyButtonText: {
     color: COLORS.journeyButtonText,
@@ -87,6 +102,8 @@ const styles = StyleSheet.create({
   },
   badgeButton: {
     backgroundColor: COLORS.badgeButton,
+    borderWidth: 1,
+    borderColor: COLORS.badgeButtonBorder,
   },
   badgeButtonText: {
     color: COLORS.badgeButtonText,

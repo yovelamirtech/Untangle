@@ -22,6 +22,15 @@ This doc is split into phases. Copy one phase at a time into Claude Code, verify
 
 ---
 
+## Ad hoc — store-readiness polish (2026-09-17)
+
+Not one of the numbered phases above — a round of adjustments requested directly ahead of a store submission:
+- Main menu (`MainMenuScreen.tsx`) recolored from a borrowed level palette to the app's own dark-violet hub identity (`#1B1530`/`#E4DBFA`/`#F6A8B8`/`#7FD9B9`, already shared by JourneyScreen/SettingsScreen/BadgeCollectionScreen/BadgePuzzleScreen) — the studio splash screen already showed the studio logo, so that part needed no change. `assets/game_logo/wordmark.svg` recolored to match (mint loop, pink nodes, lavender text); the app icon and native/studio splash assets are untouched (still generated from the unchanged `icon-main.svg`/`icon-appstore.svg`).
+- Small graphics polish: rounded rope end-caps (`PuzzleEdge`) and a subtle drop shadow on normal-level nodes (`PuzzleNode`, opt-in via `withShadow` — left off for Badge Challenge's high node counts to avoid the extra per-node draw cost).
+- Camera/scramble rework (`puzzleLayout.ts`'s new `getInitialFocusSize`, plus `offsetX`/`offsetY` on `puzzle.ts`'s scramble functions): every level and badge puzzle now starts zoomed in just enough (computed from the actual screen aspect ratio, not a fixed constant) that the canvas' own border stroke is never visible at the initial view, with the solved/scrambled puzzle confined to exactly that visible area so the whole shape is on-screen from the first frame. Badge Challenge zooms in further still (`BADGE_ZOOM_TIGHTNESS`) so its board edges feel farther away than a normal level's.
+
+---
+
 ## Assets already prepared (do not regenerate)
 
 - `assets/stutio_logo/` — the studio's own logo (Yovlez Studio), in three variants: `icon-primary.svg` (with cartridge notch, use for the splash fade), `icon-appstore.svg` (plain square), `wordmark.svg` (icon + "Yovlez STUDIO" text). Note the folder name has a typo (`stutio` not `studio`) — kept as-is unless told to rename it, since renaming means updating every import.

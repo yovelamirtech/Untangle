@@ -19,7 +19,7 @@ import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
-import { clampTranslate, getCanvasSize, getFitCamera } from './puzzleLayout';
+import { clampTranslate, getCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
@@ -51,15 +51,24 @@ interface NodeValue {
   y: SharedValue<number>;
 }
 
-function buildPuzzle(canvasSize: number, level: number): Graph {
+/**
+ * Builds the puzzle so it lives entirely within the smaller, centered
+ * square the initial camera is actually zoomed into (see
+ * getInitialFocusSize) — not the full (much bigger) canvas — so the whole
+ * rope is visible from the first frame even though the camera starts
+ * zoomed in past the canvas' own edges.
+ */
+function buildPuzzle(canvasSize: number, level: number, width: number, height: number): Graph {
   const { nodeCount } = getDifficultyForLevel(level);
+  const focusSize = getInitialFocusSize(canvasSize, width, height);
+  const offset = (canvasSize - focusSize) / 2;
   const solved = generateSolvedGraph(
     nodeCount,
     { x: canvasSize / 2, y: canvasSize / 2 },
-    canvasSize / 2 - CANVAS_MARGIN
+    focusSize / 2 - CANVAS_MARGIN
   );
   const minCrossings = getMinCrossingsForLevel(nodeCount);
-  return scrambleGraphAtLeast(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, 20);
+  return scrambleGraphAtLeast(solved, focusSize, focusSize, CANVAS_MARGIN, minCrossings, 20, offset, offset);
 }
 
 interface PuzzleScreenProps {
@@ -111,7 +120,7 @@ function PuzzleGame({
   const [canvasSize, setCanvasSize] = useState(() =>
     getCanvasSize(getDifficultyForLevel(initialLevel).nodeCount, viewportMax)
   );
-  const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, initialLevel));
+  const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, initialLevel, width, height));
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
   const [levelPickerVisible, setLevelPickerVisible] = useState(false);
   const [levelInput, setLevelInput] = useState('');
@@ -133,7 +142,7 @@ function PuzzleGame({
   const crossingsRef = useRef(crossings);
   const graphRef = useRef(graph);
 
-  const initialCamera = getFitCamera(canvasSize, width, height);
+  const initialCamera = getFitCamera(canvasSize, width, height, getInitialFocusSize(canvasSize, width, height));
   const scale = useSharedValue(initialCamera.scale);
   const savedScale = useSharedValue(initialCamera.scale);
   const translateX = useSharedValue(initialCamera.translateX);
@@ -150,7 +159,7 @@ function PuzzleGame({
   const pinchFocalCanvasY = useSharedValue(0);
 
   const resetCamera = useCallback(() => {
-    const target = getFitCamera(canvasSize, width, height);
+    const target = getFitCamera(canvasSize, width, height, getInitialFocusSize(canvasSize, width, height));
     scale.value = withTiming(target.scale);
     translateX.value = withTiming(target.translateX);
     translateY.value = withTiming(target.translateY);
@@ -162,8 +171,13 @@ function PuzzleGame({
       const nextLevel = Math.max(1, Math.floor(targetLevel));
       const nextNodeCount = getDifficultyForLevel(nextLevel).nodeCount;
       const nextCanvasSize = getCanvasSize(nextNodeCount, viewportMax);
-      const nextGraph = buildPuzzle(nextCanvasSize, nextLevel);
-      const nextCamera = getFitCamera(nextCanvasSize, width, height);
+      const nextGraph = buildPuzzle(nextCanvasSize, nextLevel, width, height);
+      const nextCamera = getFitCamera(
+        nextCanvasSize,
+        width,
+        height,
+        getInitialFocusSize(nextCanvasSize, width, height)
+      );
 
       setLevel(nextLevel);
       setCanvasSize(nextCanvasSize);
@@ -363,6 +377,7 @@ function PuzzleGame({
                   nodeY={nv.y}
                   pulse={pulse}
                   scale={scale}
+                  withShadow
                 />
               );
             })}

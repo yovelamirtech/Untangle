@@ -47,13 +47,23 @@ export function generateSolvedGraph(n: number, center: Point, radius: number): G
 
 /**
  * Returns a new graph with the same nodes/edges but node positions
- * randomized within the given bounds, so lines now cross.
+ * randomized within the given bounds, so lines now cross. `offsetX`/
+ * `offsetY` shift that bounding box within the canvas — used to keep the
+ * scramble confined to the smaller, centered area the initial camera is
+ * actually zoomed into, rather than the whole (much bigger) canvas.
  */
-export function scrambleGraph(graph: Graph, width: number, height: number, margin: number): Graph {
+export function scrambleGraph(
+  graph: Graph,
+  width: number,
+  height: number,
+  margin: number,
+  offsetX: number = 0,
+  offsetY: number = 0
+): Graph {
   const nodes = graph.nodes.map((node) => ({
     id: node.id,
-    x: margin + Math.random() * (width - 2 * margin),
-    y: margin + Math.random() * (height - 2 * margin),
+    x: offsetX + margin + Math.random() * (width - 2 * margin),
+    y: offsetY + margin + Math.random() * (height - 2 * margin),
   }));
   return { nodes, edges: graph.edges };
 }
@@ -274,13 +284,15 @@ export function scrambleGraphAtLeast(
   height: number,
   margin: number,
   minCrossings: number,
-  maxAttempts = 8
+  maxAttempts = 8,
+  offsetX: number = 0,
+  offsetY: number = 0
 ): Graph {
-  let best = scrambleGraph(graph, width, height, margin);
+  let best = scrambleGraph(graph, width, height, margin, offsetX, offsetY);
   let bestCrossings = countCrossings(best);
 
   for (let i = 1; i < maxAttempts && bestCrossings < minCrossings; i++) {
-    const candidate = scrambleGraph(graph, width, height, margin);
+    const candidate = scrambleGraph(graph, width, height, margin, offsetX, offsetY);
     const crossings = countCrossings(candidate);
     if (crossings > bestCrossings) {
       best = candidate;

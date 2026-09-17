@@ -10,7 +10,7 @@ import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { countCrossings, Graph, Node, scrambleBadgeGraph } from './puzzle';
-import { BADGE_CANVAS_MARGIN_FRACTION, clampTranslate, getBadgeCanvasSize, getFitCamera } from './puzzleLayout';
+import { BADGE_ZOOM_TIGHTNESS, clampTranslate, getBadgeCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 
 const NODE_RADIUS = 5;
@@ -68,7 +68,8 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
     const viewportMax = Math.max(width, height);
     const nodeCount = getBadgeNodeCount(badge);
     const canvasSize = getBadgeCanvasSize(nodeCount, viewportMax);
-    const margin = canvasSize * BADGE_CANVAS_MARGIN_FRACTION;
+    const focusSize = getInitialFocusSize(canvasSize, width, height, BADGE_ZOOM_TIGHTNESS);
+    const margin = (canvasSize - focusSize) / 2;
     const { graph: solved, interiorIds } = getBadgeSolvedGraph(badge, canvasSize, margin);
     const minCrossings = getMinCrossingsForLevel(nodeCount);
     const maxCrossings = minCrossings * 2;
@@ -121,12 +122,14 @@ function BadgeGame({
     () => getBadgeCanvasSize(initialGraph.nodes.length, viewportMax),
     [viewportMax, initialGraph.nodes.length]
   );
-  const margin = canvasSize * BADGE_CANVAS_MARGIN_FRACTION;
   // The camera fits to the drawing's own footprint (canvas minus margin),
   // not the whole huge canvas — otherwise the badge would open as a speck
   // in the middle of a mostly-empty screen instead of "starting in the
-  // middle" already zoomed in on it.
-  const focusSize = canvasSize - 2 * margin;
+  // middle" already zoomed in on it. focusSize is picked (per the actual
+  // screen aspect ratio) so the canvas' own border stays off-screen at
+  // this zoom, with extra tightness so Badge Challenge's board edges feel
+  // further away than a normal level's.
+  const focusSize = getInitialFocusSize(canvasSize, width, height, BADGE_ZOOM_TIGHTNESS);
 
   const [graph] = useState(initialGraph);
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
