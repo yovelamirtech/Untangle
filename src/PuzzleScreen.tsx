@@ -203,10 +203,33 @@ function PuzzleGame({
     [level, viewportMax, width, height, pulse, scale, savedScale, translateX, translateY]
   );
 
-  const advanceLevel = useCallback(() => {
-    if (crossingsRef.current !== 0) return;
-    goToLevel(level + 1);
-  }, [level, goToLevel]);
+  // Reaching a level for the first time (level === the furthest one so far)
+  // unlocks the next stage on the journey map; onLevelChange only ever
+  // moves progress forward (see App.tsx), so replaying an already-solved
+  // level calls it too but it's a no-op — solving it again neither unlocks
+  // anything further nor locks anything back up. Either way, solving
+  // returns to the journey map instead of auto-loading the next puzzle —
+  // the player picks their own next stage from there.
+  const handleSolved = useCallback(() => {
+    if (getZoneIndexForLevel(level + 1) !== getZoneIndexForLevel(level)) {
+      showInterstitialIfReady();
+    }
+    onLevelChange(level + 1);
+    onOpenJourney();
+  }, [level, onLevelChange, onOpenJourney]);
+
+  // Shared by an actual solve and the dev-only "force solve" button below —
+  // both play the same feedback and lead to the same journey-map return.
+  const triggerSolvedFeedback = useCallback(() => {
+    fireSolveHapticIfEnabled();
+    pulse.value = withSequence(
+      withTiming(1, { duration: 200 }),
+      withTiming(0.3, { duration: 250 }),
+      withTiming(1, { duration: 200 }),
+      withTiming(0, { duration: 250 })
+    );
+    setTimeout(handleSolved, ADVANCE_DELAY_MS);
+  }, [handleSolved, pulse]);
 
   const recomputeCrossings = useCallback(() => {
     const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
@@ -216,16 +239,19 @@ function PuzzleGame({
     setCrossings(newCrossings);
 
     if (newCrossings === 0 && !wasSolved) {
-      fireSolveHapticIfEnabled();
-      pulse.value = withSequence(
-        withTiming(1, { duration: 200 }),
-        withTiming(0.3, { duration: 250 }),
-        withTiming(1, { duration: 200 }),
-        withTiming(0, { duration: 250 })
-      );
-      setTimeout(advanceLevel, ADVANCE_DELAY_MS);
+      triggerSolvedFeedback();
     }
-  }, [advanceLevel, nodeValues, pulse]);
+  }, [nodeValues, triggerSolvedFeedback]);
+
+  // Dev-only: skips straight to the solve feedback/flow without needing to
+  // actually untangle the level, for testing. Never shown in production
+  // (see the __DEV__ guard around its button below).
+  const forceSolve = useCallback(() => {
+    if (crossingsRef.current === 0) return;
+    crossingsRef.current = 0;
+    setCrossings(0);
+    triggerSolvedFeedback();
+  }, [triggerSolvedFeedback]);
 
   // A single gesture handles both node-dragging and camera-panning: it hit-
   // tests against every node in canvas space when the touch starts, so
@@ -399,6 +425,11 @@ function PuzzleGame({
           </Text>
         </View>
         <View style={styles.buttonRow}>
+          {__DEV__ && !solved && (
+            <Pressable style={styles.fitButton} onPress={forceSolve}>
+              <Text style={styles.fitButtonText}>Test: Solve</Text>
+            </Pressable>
+          )}
           <Pressable style={styles.fitButton} onPress={onOpenJourney}>
             <Text style={styles.fitButtonText}>Journey</Text>
           </Pressable>

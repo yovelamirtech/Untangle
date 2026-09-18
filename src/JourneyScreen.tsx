@@ -6,6 +6,34 @@ import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 import AdBanner from './AdBanner';
 import { getZoneIndexForLevel, isWaypointLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
+/** Tiny deterministic PRNG (mulberry32) so a zone's decorative star scatter
+ * is stable across re-renders instead of jumping around every time. */
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const STARS_PER_ZONE = 40;
+
+/** A subtle, stable scatter of tiny dots within a zone band — decorative
+ * only (like faint stars), seeded by the band's own start level so it never
+ * shifts between renders or scroll updates. */
+function getZoneStars(band: { top: number; height: number; startLevel: number }, width: number) {
+  const rand = mulberry32(band.startLevel * 7919 + 1);
+  return Array.from({ length: STARS_PER_ZONE }, () => ({
+    x: rand() * width,
+    y: band.top + rand() * band.height,
+    r: 0.6 + rand() * 1.2,
+    opacity: 0.08 + rand() * 0.14,
+  }));
+}
+
 const ROW_HEIGHT = 60;
 const LOOKAHEAD_LEVELS = 4;
 const MIN_DISPLAY_LEVELS = 12;
@@ -31,7 +59,10 @@ const COLORS = {
 interface JourneyScreenProps {
   furthestLevel: number;
   onClose: () => void;
-  onPlay: () => void;
+  /** Opens the given level for play — any unlocked stage (1..furthestLevel)
+   * can be tapped; replaying an already-solved one doesn't affect
+   * progression either way. */
+  onPlay: (level: number) => void;
 }
 
 export default function JourneyScreen({ furthestLevel, onClose, onPlay }: JourneyScreenProps) {
@@ -138,18 +169,33 @@ export default function JourneyScreen({ furthestLevel, onClose, onPlay }: Journe
                 fill={ZONES[band.zoneIndex].background}
               />
             ))}
-            {zoneBands.map((band) => (
-              <SvgText
-                key={`label-${band.startLevel}`}
-                x={16}
-                y={band.top + band.height - 16}
-                fill={COLORS.zoneLabel}
-                fontSize={24}
-                fontWeight="800"
-              >
-                {ZONES[band.zoneIndex].name}
-              </SvgText>
-            ))}
+            {zoneBands.map((band) =>
+              getZoneStars(band, width).map((star, i) => (
+                <Circle
+                  key={`star-${band.startLevel}-${i}`}
+                  cx={star.x}
+                  cy={star.y}
+                  r={star.r}
+                  fill={COLORS.text}
+                  opacity={star.opacity}
+                />
+              ))
+            )}
+            {zoneBands.map((band) => {
+              const name = ZONES[band.zoneIndex].name;
+              // Shown near both the top and bottom of the band — tall zones
+              // (21 levels of scrolling) would otherwise only show their
+              // name once, easy to scroll straight past.
+              const labelYs = [band.top + 34, band.top + band.height - 16];
+              return labelYs.map((y, i) => (
+                <Fragment key={`label-${band.startLevel}-${i}`}>
+                  <Circle cx={10} cy={y - 7} r={2.5} fill={COLORS.zoneLabel} />
+                  <SvgText x={22} y={y} fill={COLORS.zoneLabel} fontSize={26} fontWeight="800">
+                    {name}
+                  </SvgText>
+                </Fragment>
+              ));
+            })}
             {points.slice(0, -1).map((p, i) => {
               const next = points[i + 1];
               return (
@@ -202,30 +248,31 @@ export default function JourneyScreen({ furthestLevel, onClose, onPlay }: Journe
             })}
           </Svg>
 
-          {currentPoint && (
-            <>
+          {points
+            .filter((p) => p.level <= furthestLevel)
+            .map((p) => (
               <Pressable
-                style={[
-                  styles.currentTapTarget,
-                  { left: currentPoint.x - 28, top: currentPoint.y - 28 },
-                ]}
-                onPress={onPlay}
+                key={`tap-${p.level}`}
+                style={[styles.tapTarget, { left: p.x - 28, top: p.y - 28 }]}
+                onPress={() => onPlay(p.level)}
                 hitSlop={8}
               />
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.arrow,
-                  {
-                    left: currentPoint.x - ARROW_SIZE / 2,
-                    top: currentPoint.y - WAYPOINT_RADIUS - ARROW_GAP - ARROW_SIZE,
-                    transform: [{ translateY: bob }],
-                  },
-                ]}
-              >
-                <Ionicons name="caret-up" size={ARROW_SIZE} color={COLORS.ringCurrent} />
-              </Animated.View>
-            </>
+            ))}
+
+          {currentPoint && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.arrow,
+                {
+                  left: currentPoint.x - ARROW_SIZE / 2,
+                  top: currentPoint.y - WAYPOINT_RADIUS - ARROW_GAP - ARROW_SIZE,
+                  transform: [{ translateY: bob }],
+                },
+              ]}
+            >
+              <Ionicons name="caret-down" size={ARROW_SIZE} color={COLORS.ringCurrent} />
+            </Animated.View>
           )}
         </View>
       </ScrollView>
@@ -266,7 +313,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  currentTapTarget: {
+  tapTarget: {
     position: 'absolute',
     width: 56,
     height: 56,

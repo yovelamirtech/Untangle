@@ -25,7 +25,15 @@ type Screen = 'studioSplash' | 'menu' | 'game' | 'journey' | 'settings' | 'badge
 export default function App() {
   const [screen, setScreen] = useState<Screen>('studioSplash');
   const [furthestLevel, setFurthestLevel] = useState<number | null>(null);
+  // Which level PuzzleScreen should open at — set explicitly whenever the
+  // Journey map is tapped, so replaying an older, already-solved level is
+  // possible without disturbing furthestLevel.
+  const [activeLevel, setActiveLevel] = useState<number | null>(null);
   const [activeBadgeId, setActiveBadgeId] = useState<string | null>(null);
+  // The badge just solved, so the collection screen can play its one-time
+  // "hint -> earned" reveal animation the next time it's shown; cleared
+  // once that animation has been shown.
+  const [justSolvedBadgeId, setJustSolvedBadgeId] = useState<string | null>(null);
   // Where "Back" from Settings should return to — it can be opened from
   // either the main menu or from inside a game screen.
   const screenBeforeSettings = useRef<Screen>('menu');
@@ -109,18 +117,23 @@ export default function App() {
             setActiveBadgeId(badgeId);
             setScreen('badgePuzzle');
           }}
+          justSolvedBadgeId={justSolvedBadgeId}
+          onJustSolvedShown={() => setJustSolvedBadgeId(null)}
         />
       )}
       {screen === 'badgePuzzle' && activeBadgeId && (
         <BadgePuzzleScreen
           badgeId={activeBadgeId}
           onBack={() => setScreen('badges')}
-          onSolved={() => setScreen('badges')}
+          onSolved={() => {
+            setJustSolvedBadgeId(activeBadgeId);
+            setScreen('badges');
+          }}
         />
       )}
       {screen === 'game' && (
         <PuzzleScreen
-          initialLevel={furthestLevel}
+          initialLevel={activeLevel ?? furthestLevel}
           onLevelChange={handleLevelChange}
           onOpenJourney={openJourney}
           onOpenSettings={openSettings}
@@ -131,7 +144,10 @@ export default function App() {
         <JourneyScreen
           furthestLevel={furthestLevel}
           onClose={() => setScreen(screenBeforeJourney.current)}
-          onPlay={() => setScreen('game')}
+          onPlay={(level) => {
+            setActiveLevel(level);
+            setScreen('game');
+          }}
         />
       )}
       <StatusBar style={screen === 'game' ? 'dark' : 'light'} />

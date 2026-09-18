@@ -3,11 +3,19 @@ export interface LevelPalette {
   rope: string;
   node: string;
   border: string;
-  /** Fill for the rope's two loose ends — reuses the palette's own rope
-   * color (already on screen as the edges) rather than introducing a new
-   * one, so the start/end nodes read as distinct beads without clashing. */
+  /** Fill for the rope's two loose ends. A fixed, punchy accent rather than
+   * anything derived from the level's own (necessarily softer) pastel
+   * family, so it reads as clearly brighter than a regular node on every
+   * palette, no matter how saturated that palette's own node color is. */
   endpoint: string;
 }
+
+/** Shared across every level palette and Badge Challenge alike — see the
+ * `endpoint` field above. A more saturated relative of the app's existing
+ * pink accent (#F6A8B8, used for Journey's current stage and the main
+ * menu's CTA), picked so it still stays brighter than the most vivid node
+ * colors in the palette list above (rose petal, coral blush, apricot, …). */
+export const ENDPOINT_ACCENT = '#FF6FA0';
 
 /**
  * Hand-picked pastel palettes (each background/rope/node trio drawn from
@@ -44,5 +52,5 @@ function darken(hex: string, amount: number): string {
 export function getPaletteForLevel(level: number): LevelPalette {
   const { background, rope, node } = PALETTES[(level - 1) % PALETTES.length];
   const darkRope = darken(rope, 0.18);
-  return { background, rope: darkRope, node, border: `${rope}99`, endpoint: darkRope };
+  return { background, rope: darkRope, node, border: `${rope}99`, endpoint: ENDPOINT_ACCENT };
 }

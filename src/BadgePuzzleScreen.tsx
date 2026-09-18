@@ -1,23 +1,38 @@
-import { Canvas, Group, Rect } from '@shopify/react-native-skia';
+import { Canvas, Circle, Group, Rect } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { makeMutable, runOnJS, SharedValue, useDerivedValue, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  makeMutable,
+  runOnJS,
+  SharedValue,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { getBadge, getBadgeNodeCount, getBadgeSolvedGraph } from './badges';
 import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './badgeProgress';
 import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
+import { ENDPOINT_ACCENT } from './palette';
 import { countCrossings, getEndpointIds, Graph, Node, scrambleBadgeGraph } from './puzzle';
 import { BADGE_ZOOM_TIGHTNESS, clampTranslate, getBadgeCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 
 const NODE_RADIUS = 5;
 const HIT_RADIUS_SCREEN = 32;
-const ADVANCE_DELAY_MS = 1200;
+// Longer than a normal level's — there's a bigger celebration to enjoy
+// (confetti burst + banner) before returning to the collection screen.
+const ADVANCE_DELAY_MS = 2000;
 const DRAG_THROTTLE_UPDATES = 3;
 const DRAG_BOUNDS_PADDING = 24;
+const CONFETTI_COUNT = 28;
+const CONFETTI_COLORS = ['#F6A8B8', '#7FD9B9', '#E4DBFA'];
 
 const COLORS = {
   background: '#1B1530',
@@ -25,9 +40,10 @@ const COLORS = {
   rope: 'rgba(228,219,250,0.55)',
   node: '#C2C6F5',
   // The rope's two loose ends (or each disconnected piece's, for a badge
-  // vectorized as several separate lines) — reuses the app's existing
-  // accent color rather than a new one, so they read as distinct beads.
-  endpoint: '#F6A8B8',
+  // vectorized as several separate lines) — same fixed bright accent as a
+  // normal level's endpoints (see palette.ts), so it reads consistently
+  // across the whole game.
+  endpoint: ENDPOINT_ACCENT,
   ropeSolved: '#7FD9B9',
   nodeSolved: '#4FBFA0',
   subtitle: '#E4DBFA',
@@ -39,6 +55,89 @@ interface NodeValue {
   id: number;
   x: SharedValue<number>;
   y: SharedValue<number>;
+}
+
+interface ConfettiSpec {
+  angle: number;
+  distance: number;
+  color: string;
+}
+
+/** One confetti dot in a solve celebration's burst: flies outward from the
+ * screen's center along its own fixed angle/distance as `burst` runs 0->1,
+ * arcing up a little and fading out near the end. Screen-space (not inside
+ * the pan/zoom Group), so it always bursts from the middle of the view
+ * regardless of where the camera happens to be. */
+function ConfettiDot({
+  spec,
+  burst,
+  centerX,
+  centerY,
+}: {
+  spec: ConfettiSpec;
+  burst: SharedValue<number>;
+  centerX: number;
+  centerY: number;
+}) {
+  const cx = useDerivedValue(
+    () => centerX + Math.cos(spec.angle) * spec.distance * burst.value,
+    [burst]
+  );
+  const cy = useDerivedValue(
+    () => centerY + Math.sin(spec.angle) * spec.distance * burst.value - 70 * burst.value * (1 - burst.value),
+    [burst]
+  );
+  const r = useDerivedValue(() => 4.5 * (1 - burst.value * 0.3), [burst]);
+  const opacity = useDerivedValue(() => 1 - Math.max(0, burst.value - 0.55) / 0.45, [burst]);
+
+  return <Circle cx={cx} cy={cy} r={r} color={spec.color} opacity={opacity} />;
+}
+
+/** The badge-solve celebration: a confetti burst (Skia, screen-space) plus a
+ * bouncing "badge earned" banner — a lot more festive than a normal level's
+ * quick pulse, since earning a badge is meant to feel like a bigger deal. */
+function SolveCelebration({
+  badgeName,
+  width,
+  height,
+  burst,
+}: {
+  badgeName: string;
+  width: number;
+  height: number;
+  burst: SharedValue<number>;
+}) {
+  const specs = useMemo<ConfettiSpec[]>(
+    () =>
+      Array.from({ length: CONFETTI_COUNT }, (_, i) => {
+        const angle = (i / CONFETTI_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+        const distance = Math.min(width, height) * (0.28 + Math.random() * 0.22);
+        return { angle, distance, color: CONFETTI_COLORS[i % CONFETTI_COLORS.length] };
+      }),
+    // Generated once when the celebration first mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const bannerStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, burst.value * 2.5),
+    transform: [{ scale: 0.6 + Math.min(1, burst.value * 2) * 0.4 }],
+  }));
+
+  return (
+    <>
+      <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+        {specs.map((spec, i) => (
+          <ConfettiDot key={i} spec={spec} burst={burst} centerX={width / 2} centerY={height / 2} />
+        ))}
+      </Canvas>
+      <View style={styles.celebrationBannerWrap} pointerEvents="none">
+        <Animated.View style={[styles.celebrationBanner, bannerStyle]}>
+          <Text style={styles.celebrationBannerText}>🏅 {badgeName} earned!</Text>
+        </Animated.View>
+      </View>
+    </>
+  );
 }
 
 /** A saved position's node id is only meaningful for the exact graph
@@ -65,7 +164,16 @@ interface BadgePuzzleScreenProps {
 export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePuzzleScreenProps) {
   const { width, height } = useWindowDimensions();
   const badge = getBadge(badgeId);
-  const [initialGraph, setInitialGraph] = useState<Graph | null>(null);
+  // canvasSize is stored alongside the graph (not recomputed later from
+  // initialGraph.nodes.length) because it wouldn't be the same number:
+  // singleLineify (inside getBadgeSolvedGraph) can duplicate a node at
+  // every junction its Euler-trail walk revisits, so the *linearized*
+  // graph can have more nodes than getBadgeNodeCount(badge) did when this
+  // canvasSize was chosen. Recomputing canvasSize downstream from the
+  // linearized count used to give a bigger canvas than the one the shape
+  // was actually laid out on, so the camera centered on the wrong point
+  // and the badge could open off-screen instead of centered.
+  const [built, setBuilt] = useState<{ graph: Graph; canvasSize: number } | null>(null);
 
   useEffect(() => {
     if (!badge || !width || !height) return;
@@ -82,14 +190,14 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
       const graph = saved
         ? applySavedPositions(solved, saved)
         : scrambleBadgeGraph(solved, canvasSize, canvasSize, margin, minCrossings, maxCrossings, interiorIds);
-      setInitialGraph(graph);
+      setBuilt({ graph, canvasSize });
     });
     // Only re-run if the badge or viewport actually changes — not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [badgeId, width, height]);
 
   if (!badge) return null;
-  if (!width || !height || !initialGraph) return null;
+  if (!width || !height || !built) return null;
 
   return (
     <BadgeGame
@@ -97,7 +205,8 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
       badgeName={badge.name}
       width={width}
       height={height}
-      initialGraph={initialGraph}
+      initialGraph={built.graph}
+      canvasSize={built.canvasSize}
       onBack={onBack}
       onSolved={onSolved}
     />
@@ -110,6 +219,7 @@ function BadgeGame({
   width,
   height,
   initialGraph,
+  canvasSize,
   onBack,
   onSolved,
 }: {
@@ -118,14 +228,10 @@ function BadgeGame({
   width: number;
   height: number;
   initialGraph: Graph;
+  canvasSize: number;
   onBack: () => void;
   onSolved: () => void;
 }) {
-  const viewportMax = Math.max(width, height);
-  const canvasSize = useMemo(
-    () => getBadgeCanvasSize(initialGraph.nodes.length, viewportMax),
-    [viewportMax, initialGraph.nodes.length]
-  );
   // The camera fits to the drawing's own footprint (canvas minus margin),
   // not the whole huge canvas — otherwise the badge would open as a speck
   // in the middle of a mostly-empty screen instead of "starting in the
@@ -146,6 +252,8 @@ function BadgeGame({
   const nodeValueById = useCallback((id: number) => nodeValues.find((n) => n.id === id)!, [nodeValues]);
 
   const pulse = useSharedValue(0);
+  const burst = useSharedValue(0);
+  const [celebrating, setCelebrating] = useState(false);
   const crossingsRef = useRef(crossings);
   const solvedRef = useRef(crossings === 0);
 
@@ -178,6 +286,22 @@ function BadgeGame({
     saveBadgeInProgress(badgeId, positions);
   }, [badgeId, nodeValues]);
 
+  // Shared by an actual solve and the dev-only "force solve" button below.
+  const celebrateSolve = useCallback(() => {
+    solvedRef.current = true;
+    fireSolveHapticIfEnabled();
+    saveBadgeSolved(badgeId);
+    setCelebrating(true);
+    pulse.value = withSequence(
+      withTiming(1, { duration: 200 }),
+      withTiming(0.3, { duration: 250 }),
+      withTiming(1, { duration: 200 }),
+      withTiming(0, { duration: 250 })
+    );
+    burst.value = withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) });
+    setTimeout(onSolved, ADVANCE_DELAY_MS);
+  }, [badgeId, burst, onSolved, pulse]);
+
   const recomputeCrossings = useCallback(() => {
     const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
     const newCrossings = countCrossings({ nodes: currentNodes, edges: graph.edges });
@@ -186,20 +310,11 @@ function BadgeGame({
     setCrossings(newCrossings);
 
     if (newCrossings === 0 && !wasSolved) {
-      solvedRef.current = true;
-      fireSolveHapticIfEnabled();
-      saveBadgeSolved(badgeId);
-      pulse.value = withSequence(
-        withTiming(1, { duration: 200 }),
-        withTiming(0.3, { duration: 250 }),
-        withTiming(1, { duration: 200 }),
-        withTiming(0, { duration: 250 })
-      );
-      setTimeout(onSolved, ADVANCE_DELAY_MS);
+      celebrateSolve();
     } else {
       persistPositions();
     }
-  }, [badgeId, graph.edges, nodeValues, onSolved, persistPositions, pulse]);
+  }, [celebrateSolve, nodeValues, graph.edges, persistPositions]);
 
   // Dev-only: triggers the exact same solve feedback/persistence path as an
   // actual solve, without needing to untangle the (possibly huge) puzzle by
@@ -208,19 +323,10 @@ function BadgeGame({
   // guard around its button below).
   const forceSolve = useCallback(() => {
     if (solvedRef.current) return;
-    solvedRef.current = true;
     crossingsRef.current = 0;
     setCrossings(0);
-    fireSolveHapticIfEnabled();
-    saveBadgeSolved(badgeId);
-    pulse.value = withSequence(
-      withTiming(1, { duration: 200 }),
-      withTiming(0.3, { duration: 250 }),
-      withTiming(1, { duration: 200 }),
-      withTiming(0, { duration: 250 })
-    );
-    setTimeout(onSolved, ADVANCE_DELAY_MS);
-  }, [badgeId, onSolved, pulse]);
+    celebrateSolve();
+  }, [celebrateSolve]);
 
   const dragOrPanGesture = Gesture.Pan()
     .maxPointers(1)
@@ -346,12 +452,18 @@ function BadgeGame({
                   nodeY={nv.y}
                   pulse={pulse}
                   scale={scale}
+                  // Only the (few) endpoint nodes get the shadow here — a
+                  // badge can have hundreds of regular nodes, where the
+                  // extra per-node image filter isn't worth the draw cost.
+                  withShadow={!solved && endpointIds.has(node.id)}
                 />
               );
             })}
           </Group>
         </Canvas>
       </GestureDetector>
+
+      {celebrating && <SolveCelebration badgeName={badgeName} width={width} height={height} burst={burst} />}
 
       <View style={styles.overlay}>
         <View style={styles.leftGroup}>
@@ -382,6 +494,28 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     backgroundColor: COLORS.background,
+  },
+  celebrationBannerWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  celebrationBanner: {
+    backgroundColor: '#241B38',
+    borderWidth: 1,
+    borderColor: 'rgba(228,219,250,0.3)',
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 18,
+  },
+  celebrationBannerText: {
+    color: '#E4DBFA',
+    fontSize: 20,
+    fontWeight: '800',
   },
   overlay: {
     position: 'absolute',
