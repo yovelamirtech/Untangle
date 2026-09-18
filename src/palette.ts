@@ -3,6 +3,10 @@ export interface LevelPalette {
   rope: string;
   node: string;
   border: string;
+  /** Fill for the rope's two loose ends — reuses the palette's own rope
+   * color (already on screen as the edges) rather than introducing a new
+   * one, so the start/end nodes read as distinct beads without clashing. */
+  endpoint: string;
 }
 
 /**
@@ -11,7 +15,7 @@ export interface LevelPalette {
  * hue offsets occasionally landed on combinations that clashed instead of
  * feeling cohesive. Cycled by level so nearby levels still look distinct.
  */
-const PALETTES: Omit<LevelPalette, 'border'>[] = [
+const PALETTES: Omit<LevelPalette, 'border' | 'endpoint'>[] = [
   { background: '#F3EEFC', rope: '#C9B6EC', node: '#9B7FD1' }, // lavender bloom
   { background: '#FFF1E8', rope: '#FFC9A8', node: '#F2934F' }, // peach sorbet
   { background: '#FBEEF7', rope: '#EFB6DE', node: '#C765AC' }, // berry frost
@@ -39,5 +43,6 @@ function darken(hex: string, amount: number): string {
 
 export function getPaletteForLevel(level: number): LevelPalette {
   const { background, rope, node } = PALETTES[(level - 1) % PALETTES.length];
-  return { background, rope: darken(rope, 0.18), node, border: `${rope}99` };
+  const darkRope = darken(rope, 0.18);
+  return { background, rope: darkRope, node, border: `${rope}99`, endpoint: darkRope };
 }

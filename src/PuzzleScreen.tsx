@@ -18,7 +18,7 @@ import { getDifficultyForLevel, getMinCrossingsForLevel } from './difficulty';
 import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
+import { countCrossings, generateSolvedGraph, getEndpointIds, Graph, scrambleGraphAtLeast } from './puzzle';
 import { clampTranslate, getCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
@@ -137,6 +137,7 @@ function PuzzleGame({
     [graph]
   );
   const nodeValueById = useCallback((id: number) => nodeValues.find((n) => n.id === id)!, [nodeValues]);
+  const endpointIds = useMemo(() => getEndpointIds(graph), [graph]);
 
   const pulse = useSharedValue(0);
   const crossingsRef = useRef(crossings);
@@ -372,7 +373,7 @@ function PuzzleGame({
                 <PuzzleNode
                   key={node.id}
                   radius={NODE_RADIUS}
-                  fill={solved ? COLORS.nodeSolved : palette.node}
+                  fill={solved ? COLORS.nodeSolved : endpointIds.has(node.id) ? palette.endpoint : palette.node}
                   nodeX={nv.x}
                   nodeY={nv.y}
                   pulse={pulse}

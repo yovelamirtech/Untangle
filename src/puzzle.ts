@@ -304,6 +304,27 @@ export function scrambleGraphAtLeast(
 }
 
 /**
+ * Ids of a graph's "loose end" nodes — degree 0 or 1 — i.e. the start and
+ * end of an open rope, or of each separate piece for a graph made of
+ * several disconnected paths (see singleLineify). Works off the edge list
+ * alone, so it's correct however many pieces the graph has, without
+ * assuming a single path from node 0 to the last node.
+ */
+export function getEndpointIds(graph: Graph): Set<number> {
+  const degree = new Map<number, number>();
+  for (const n of graph.nodes) degree.set(n.id, 0);
+  for (const e of graph.edges) {
+    degree.set(e.a, (degree.get(e.a) ?? 0) + 1);
+    degree.set(e.b, (degree.get(e.b) ?? 0) + 1);
+  }
+  const endpoints = new Set<number>();
+  for (const [id, d] of degree) {
+    if (d <= 1) endpoints.add(id);
+  }
+  return endpoints;
+}
+
+/**
  * Counts how many pairs of (non-adjacent) edges currently cross.
  *
  * Builds a node-id lookup once up front — with an O(N) linear scan per

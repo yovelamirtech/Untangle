@@ -9,7 +9,7 @@ import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './b
 import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { countCrossings, Graph, Node, scrambleBadgeGraph } from './puzzle';
+import { countCrossings, getEndpointIds, Graph, Node, scrambleBadgeGraph } from './puzzle';
 import { BADGE_ZOOM_TIGHTNESS, clampTranslate, getBadgeCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 
@@ -24,6 +24,10 @@ const COLORS = {
   border: 'rgba(228,219,250,0.25)',
   rope: 'rgba(228,219,250,0.55)',
   node: '#C2C6F5',
+  // The rope's two loose ends (or each disconnected piece's, for a badge
+  // vectorized as several separate lines) — reuses the app's existing
+  // accent color rather than a new one, so they read as distinct beads.
+  endpoint: '#F6A8B8',
   ropeSolved: '#7FD9B9',
   nodeSolved: '#4FBFA0',
   subtitle: '#E4DBFA',
@@ -133,6 +137,7 @@ function BadgeGame({
 
   const [graph] = useState(initialGraph);
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
+  const endpointIds = useMemo(() => getEndpointIds(graph), [graph]);
 
   const nodeValues = useMemo<NodeValue[]>(
     () => graph.nodes.map((n) => ({ id: n.id, x: makeMutable(n.x), y: makeMutable(n.y) })),
@@ -195,6 +200,27 @@ function BadgeGame({
       persistPositions();
     }
   }, [badgeId, graph.edges, nodeValues, onSolved, persistPositions, pulse]);
+
+  // Dev-only: triggers the exact same solve feedback/persistence path as an
+  // actual solve, without needing to untangle the (possibly huge) puzzle by
+  // hand first — for checking the solve animation/haptic/save-and-return
+  // flow while testing. Never shown in a production build (see the __DEV__
+  // guard around its button below).
+  const forceSolve = useCallback(() => {
+    if (solvedRef.current) return;
+    solvedRef.current = true;
+    crossingsRef.current = 0;
+    setCrossings(0);
+    fireSolveHapticIfEnabled();
+    saveBadgeSolved(badgeId);
+    pulse.value = withSequence(
+      withTiming(1, { duration: 200 }),
+      withTiming(0.3, { duration: 250 }),
+      withTiming(1, { duration: 200 }),
+      withTiming(0, { duration: 250 })
+    );
+    setTimeout(onSolved, ADVANCE_DELAY_MS);
+  }, [badgeId, onSolved, pulse]);
 
   const dragOrPanGesture = Gesture.Pan()
     .maxPointers(1)
@@ -315,7 +341,7 @@ function BadgeGame({
                 <PuzzleNode
                   key={node.id}
                   radius={NODE_RADIUS}
-                  fill={solved ? COLORS.nodeSolved : COLORS.node}
+                  fill={solved ? COLORS.nodeSolved : endpointIds.has(node.id) ? COLORS.endpoint : COLORS.node}
                   nodeX={nv.x}
                   nodeY={nv.y}
                   pulse={pulse}
@@ -336,9 +362,16 @@ function BadgeGame({
             {solved ? `${badgeName} — Solved!` : `${badgeName} · ${crossings} crossing${crossings === 1 ? '' : 's'}`}
           </Text>
         </View>
-        <Pressable style={styles.pillButton} onPress={resetCamera}>
-          <Text style={styles.pillButtonText}>Fit</Text>
-        </Pressable>
+        <View style={styles.rightGroup}>
+          {__DEV__ && !solved && (
+            <Pressable style={styles.pillButton} onPress={forceSolve}>
+              <Text style={styles.pillButtonText}>Test: Solve</Text>
+            </Pressable>
+          )}
+          <Pressable style={styles.pillButton} onPress={resetCamera}>
+            <Text style={styles.pillButtonText}>Fit</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -367,6 +400,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexShrink: 1,
+  },
+  rightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   pillButton: {
     backgroundColor: COLORS.overlayBg,

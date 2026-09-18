@@ -25,7 +25,7 @@ const COLORS = {
   ringCurrent: '#F6A8B8',
   text: '#E4DBFA',
   textDim: 'rgba(228,219,250,0.4)',
-  zoneLabel: 'rgba(228,219,250,0.55)',
+  zoneLabel: 'rgba(228,219,250,0.75)',
 };
 
 interface JourneyScreenProps {
@@ -144,8 +144,8 @@ export default function JourneyScreen({ furthestLevel, onClose, onPlay }: Journe
                 x={16}
                 y={band.top + band.height - 16}
                 fill={COLORS.zoneLabel}
-                fontSize={13}
-                fontWeight="600"
+                fontSize={24}
+                fontWeight="800"
               >
                 {ZONES[band.zoneIndex].name}
               </SvgText>
