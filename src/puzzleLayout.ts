@@ -1,5 +1,17 @@
 const FIT_PADDING = 0.92;
 
+/** How much extra safety margin (beyond the bare minimum) to leave when
+ * zooming in so the canvas' own border stroke stays comfortably outside
+ * the initial viewport in every direction, on top of just barely clearing
+ * it — matches the "zoomed in enough to hide the board's edges, and a bit
+ * more" brief. */
+const BORDER_HIDE_SAFETY = 1.08;
+
+/** How much extra zoom Badge Challenge's initial view gets beyond a normal
+ * level's — the board edges should feel much further away than in a
+ * normal level's more modest zoom-in. */
+export const BADGE_ZOOM_TIGHTNESS = 1.7;
+
 /** The rope spreads over a canvas a bit larger than the screen — more so for longer ropes. */
 export function getCanvasSize(nodeCount: number, viewportMax: number): number {
   return viewportMax * (1.1 + nodeCount / 50);
@@ -15,11 +27,30 @@ export function getBadgeCanvasSize(nodeCount: number, viewportMax: number): numb
   return viewportMax * 3 * (1.1 + nodeCount / 50);
 }
 
-/** Fraction of a badge canvas' side given over to margin on each edge —
- * the badge's drawing (see badges.ts's getBadgeSolvedGraph) is fit into
- * the remaining central square, so this controls how small an island the
- * drawing sits on relative to the empty space surrounding it. */
-export const BADGE_CANVAS_MARGIN_FRACTION = 0.3;
+/**
+ * The largest "focus" square — the area the initial camera zooms to fit
+ * (see getFitCamera) — that still keeps the *full* canvas covering the
+ * viewport in both dimensions once the camera fits to it, so the canvas'
+ * own border stroke never appears at the initial zoom.
+ *
+ * Computed from the actual screen aspect ratio rather than a fixed
+ * fraction: fitting only to the shorter dimension (as getFitScale does)
+ * would otherwise letterbox a tall phone screen above/below a square
+ * canvas, exposing the border there even though the shorter dimension was
+ * covered. `tightness` > 1 shrinks the result further for extra zoom
+ * (see BADGE_ZOOM_TIGHTNESS).
+ */
+export function getInitialFocusSize(
+  canvasSize: number,
+  width: number,
+  height: number,
+  tightness: number = 1
+): number {
+  const viewportMin = Math.min(width, height);
+  const viewportMax = Math.max(width, height);
+  const focusSize = (canvasSize * viewportMin * FIT_PADDING) / (viewportMax * BORDER_HIDE_SAFETY * tightness);
+  return Math.min(focusSize, canvasSize * 0.95);
+}
 
 /** Clamps a pan/zoom translate so the canvas can never be dragged past its own edge. */
 export function clampTranslate(value: number, scale: number, canvasSize: number, viewportLength: number) {

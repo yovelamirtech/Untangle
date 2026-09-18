@@ -18,8 +18,8 @@ import { getDifficultyForLevel, getMinCrossingsForLevel } from './difficulty';
 import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { countCrossings, generateSolvedGraph, Graph, scrambleGraphAtLeast } from './puzzle';
-import { clampTranslate, getCanvasSize, getFitCamera } from './puzzleLayout';
+import { countCrossings, generateSolvedGraph, getEndpointIds, Graph, scrambleGraphAtLeast } from './puzzle';
+import { clampTranslate, getCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
@@ -51,20 +51,36 @@ interface NodeValue {
   y: SharedValue<number>;
 }
 
-function buildPuzzle(canvasSize: number, level: number): Graph {
+/**
+ * Builds the puzzle so it lives entirely within the smaller, centered
+ * square the initial camera is actually zoomed into (see
+ * getInitialFocusSize) — not the full (much bigger) canvas — so the whole
+ * rope is visible from the first frame even though the camera starts
+ * zoomed in past the canvas' own edges.
+ */
+function buildPuzzle(canvasSize: number, level: number, width: number, height: number): Graph {
   const { nodeCount } = getDifficultyForLevel(level);
+  const focusSize = getInitialFocusSize(canvasSize, width, height);
+  const offset = (canvasSize - focusSize) / 2;
   const solved = generateSolvedGraph(
     nodeCount,
     { x: canvasSize / 2, y: canvasSize / 2 },
-    canvasSize / 2 - CANVAS_MARGIN
+    focusSize / 2 - CANVAS_MARGIN
   );
   const minCrossings = getMinCrossingsForLevel(nodeCount);
-  return scrambleGraphAtLeast(solved, canvasSize, canvasSize, CANVAS_MARGIN, minCrossings, 20);
+  return scrambleGraphAtLeast(solved, focusSize, focusSize, CANVAS_MARGIN, minCrossings, 20, offset, offset);
 }
 
 interface PuzzleScreenProps {
   initialLevel: number;
+  /** The furthest level reached so far — used only to tell a genuine
+   * first-time zone crossing apart from replaying an old level whose own
+   * zone boundary was already crossed long ago (see onZoneUnlocked). */
+  furthestLevel: number;
   onLevelChange: (level: number) => void;
+  /** Called when a solve crosses into a new zone *for the first time*, so
+   * the Journey map can play a one-time reveal for it. */
+  onZoneUnlocked: () => void;
   onOpenJourney: () => void;
   onOpenSettings: () => void;
   onExitToMenu: () => void;
@@ -72,7 +88,9 @@ interface PuzzleScreenProps {
 
 export default function PuzzleScreen({
   initialLevel,
+  furthestLevel,
   onLevelChange,
+  onZoneUnlocked,
   onOpenJourney,
   onOpenSettings,
   onExitToMenu,
@@ -88,7 +106,9 @@ export default function PuzzleScreen({
       width={width}
       height={height}
       initialLevel={initialLevel}
+      furthestLevel={furthestLevel}
       onLevelChange={onLevelChange}
+      onZoneUnlocked={onZoneUnlocked}
       onOpenJourney={onOpenJourney}
       onOpenSettings={onOpenSettings}
       onExitToMenu={onExitToMenu}
@@ -100,7 +120,9 @@ function PuzzleGame({
   width,
   height,
   initialLevel,
+  furthestLevel,
   onLevelChange,
+  onZoneUnlocked,
   onOpenJourney,
   onOpenSettings,
   onExitToMenu,
@@ -111,7 +133,7 @@ function PuzzleGame({
   const [canvasSize, setCanvasSize] = useState(() =>
     getCanvasSize(getDifficultyForLevel(initialLevel).nodeCount, viewportMax)
   );
-  const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, initialLevel));
+  const [graph, setGraph] = useState<Graph>(() => buildPuzzle(canvasSize, initialLevel, width, height));
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
   const [levelPickerVisible, setLevelPickerVisible] = useState(false);
   const [levelInput, setLevelInput] = useState('');
@@ -128,12 +150,13 @@ function PuzzleGame({
     [graph]
   );
   const nodeValueById = useCallback((id: number) => nodeValues.find((n) => n.id === id)!, [nodeValues]);
+  const endpointIds = useMemo(() => getEndpointIds(graph), [graph]);
 
   const pulse = useSharedValue(0);
   const crossingsRef = useRef(crossings);
   const graphRef = useRef(graph);
 
-  const initialCamera = getFitCamera(canvasSize, width, height);
+  const initialCamera = getFitCamera(canvasSize, width, height, getInitialFocusSize(canvasSize, width, height));
   const scale = useSharedValue(initialCamera.scale);
   const savedScale = useSharedValue(initialCamera.scale);
   const translateX = useSharedValue(initialCamera.translateX);
@@ -150,7 +173,7 @@ function PuzzleGame({
   const pinchFocalCanvasY = useSharedValue(0);
 
   const resetCamera = useCallback(() => {
-    const target = getFitCamera(canvasSize, width, height);
+    const target = getFitCamera(canvasSize, width, height, getInitialFocusSize(canvasSize, width, height));
     scale.value = withTiming(target.scale);
     translateX.value = withTiming(target.translateX);
     translateY.value = withTiming(target.translateY);
@@ -162,8 +185,13 @@ function PuzzleGame({
       const nextLevel = Math.max(1, Math.floor(targetLevel));
       const nextNodeCount = getDifficultyForLevel(nextLevel).nodeCount;
       const nextCanvasSize = getCanvasSize(nextNodeCount, viewportMax);
-      const nextGraph = buildPuzzle(nextCanvasSize, nextLevel);
-      const nextCamera = getFitCamera(nextCanvasSize, width, height);
+      const nextGraph = buildPuzzle(nextCanvasSize, nextLevel, width, height);
+      const nextCamera = getFitCamera(
+        nextCanvasSize,
+        width,
+        height,
+        getInitialFocusSize(nextCanvasSize, width, height)
+      );
 
       setLevel(nextLevel);
       setCanvasSize(nextCanvasSize);
@@ -188,10 +216,37 @@ function PuzzleGame({
     [level, viewportMax, width, height, pulse, scale, savedScale, translateX, translateY]
   );
 
-  const advanceLevel = useCallback(() => {
-    if (crossingsRef.current !== 0) return;
-    goToLevel(level + 1);
-  }, [level, goToLevel]);
+  // Reaching a level for the first time (level === the furthest one so far)
+  // unlocks the next stage on the journey map; onLevelChange only ever
+  // moves progress forward (see App.tsx), so replaying an already-solved
+  // level calls it too but it's a no-op — solving it again neither unlocks
+  // anything further nor locks anything back up. Either way, solving
+  // returns to the journey map instead of auto-loading the next puzzle —
+  // the player picks their own next stage from there.
+  const handleSolved = useCallback(() => {
+    if (getZoneIndexForLevel(level + 1) !== getZoneIndexForLevel(level)) {
+      showInterstitialIfReady();
+      // Only a genuine first-time crossing plays the "new zone" reveal —
+      // replaying an old level whose own zone boundary was already crossed
+      // long ago shouldn't show it again.
+      if (level + 1 > furthestLevel) onZoneUnlocked();
+    }
+    onLevelChange(level + 1);
+    onOpenJourney();
+  }, [level, furthestLevel, onLevelChange, onZoneUnlocked, onOpenJourney]);
+
+  // Shared by an actual solve and the dev-only "force solve" button below —
+  // both play the same feedback and lead to the same journey-map return.
+  const triggerSolvedFeedback = useCallback(() => {
+    fireSolveHapticIfEnabled();
+    pulse.value = withSequence(
+      withTiming(1, { duration: 200 }),
+      withTiming(0.3, { duration: 250 }),
+      withTiming(1, { duration: 200 }),
+      withTiming(0, { duration: 250 })
+    );
+    setTimeout(handleSolved, ADVANCE_DELAY_MS);
+  }, [handleSolved, pulse]);
 
   const recomputeCrossings = useCallback(() => {
     const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
@@ -201,16 +256,19 @@ function PuzzleGame({
     setCrossings(newCrossings);
 
     if (newCrossings === 0 && !wasSolved) {
-      fireSolveHapticIfEnabled();
-      pulse.value = withSequence(
-        withTiming(1, { duration: 200 }),
-        withTiming(0.3, { duration: 250 }),
-        withTiming(1, { duration: 200 }),
-        withTiming(0, { duration: 250 })
-      );
-      setTimeout(advanceLevel, ADVANCE_DELAY_MS);
+      triggerSolvedFeedback();
     }
-  }, [advanceLevel, nodeValues, pulse]);
+  }, [nodeValues, triggerSolvedFeedback]);
+
+  // Dev-only: skips straight to the solve feedback/flow without needing to
+  // actually untangle the level, for testing. Never shown in production
+  // (see the __DEV__ guard around its button below).
+  const forceSolve = useCallback(() => {
+    if (crossingsRef.current === 0) return;
+    crossingsRef.current = 0;
+    setCrossings(0);
+    triggerSolvedFeedback();
+  }, [triggerSolvedFeedback]);
 
   // A single gesture handles both node-dragging and camera-panning: it hit-
   // tests against every node in canvas space when the touch starts, so
@@ -358,11 +416,12 @@ function PuzzleGame({
                 <PuzzleNode
                   key={node.id}
                   radius={NODE_RADIUS}
-                  fill={solved ? COLORS.nodeSolved : palette.node}
+                  fill={solved ? COLORS.nodeSolved : endpointIds.has(node.id) ? palette.endpoint : palette.node}
                   nodeX={nv.x}
                   nodeY={nv.y}
                   pulse={pulse}
                   scale={scale}
+                  withShadow
                 />
               );
             })}
@@ -383,24 +442,34 @@ function PuzzleGame({
           </Text>
         </View>
         <View style={styles.buttonRow}>
+          {/* DEV-ONLY block: skip-to-solved button and the level-jump picker
+              below. Strip both before release. */}
+          {__DEV__ && !solved && (
+            <Pressable style={styles.fitButton} onPress={forceSolve}>
+              <Text style={styles.fitButtonText}>Test: Solve</Text>
+            </Pressable>
+          )}
           <Pressable style={styles.fitButton} onPress={onOpenJourney}>
             <Text style={styles.fitButtonText}>Journey</Text>
           </Pressable>
           <Pressable style={styles.fitButton} onPress={resetCamera}>
             <Text style={styles.fitButtonText}>Fit</Text>
           </Pressable>
-          <Pressable
-            style={styles.fitButton}
-            onPress={() => {
-              setLevelInput(String(level));
-              setLevelPickerVisible(true);
-            }}
-          >
-            <Text style={styles.fitButtonText}>Lvl {level}</Text>
-          </Pressable>
+          {__DEV__ && (
+            <Pressable
+              style={styles.fitButton}
+              onPress={() => {
+                setLevelInput(String(level));
+                setLevelPickerVisible(true);
+              }}
+            >
+              <Text style={styles.fitButtonText}>Lvl {level}</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
+      {/* DEV-ONLY: lets testing jump straight to any level. Strip before release. */}
       <Modal
           visible={levelPickerVisible}
           transparent

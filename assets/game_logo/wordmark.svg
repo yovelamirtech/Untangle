@@ -1,23 +1,22 @@
 <svg width="640" height="200" viewBox="0 0 640 200" xmlns="http://www.w3.org/2000/svg" role="img">
 <title>Untangle wordmark</title>
-<desc>Small circular icon mark followed by the game name "Untangle" in a soft dark-blue, for the main menu screen.</desc>
+<desc>Small circular icon mark (a closed, non-crossing mint-green loop of pink nodes) followed by the game name "Untangle" in soft lavender, recolored for the main menu's dark-violet background.</desc>
 
 <g transform="translate(20,20) scale(0.3125)">
-  <circle cx="256" cy="256" r="256" fill="#EAF4FF"/>
-  <circle cx="256" cy="256" r="196" fill="#4E93D9" opacity="0.08"/>
-  <circle cx="256" cy="256" r="150" fill="#4E93D9" opacity="0.10"/>
+  <circle cx="256" cy="256" r="240" fill="#F6A8B8" opacity="0.08"/>
+  <circle cx="256" cy="256" r="170" fill="#7FD9B9" opacity="0.07"/>
   <path
     d="M 256 120 C 340 132, 388 180, 392 256 C 388 332, 340 380, 256 392 C 172 380, 124 332, 120 256 C 124 180, 172 132, 256 120 Z"
-    fill="none" stroke="#8BADD1" stroke-width="10" stroke-linecap="round"
+    fill="none" stroke="#7FD9B9" stroke-width="12" stroke-linecap="round"
   />
-  <path d="M 256 120 L 256 392" stroke="#8BADD1" stroke-width="8" stroke-linecap="round" opacity="0.55"/>
-  <circle cx="256" cy="120" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
-  <circle cx="392" cy="256" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
-  <circle cx="256" cy="392" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
-  <circle cx="120" cy="256" r="22" fill="#4E93D9" stroke="#EAF4FF" stroke-width="6"/>
-  <circle cx="256" cy="256" r="16" fill="#F2934F"/>
+  <path d="M 256 120 L 256 392" stroke="#7FD9B9" stroke-width="8" stroke-linecap="round" opacity="0.45"/>
+  <circle cx="256" cy="120" r="22" fill="#F6A8B8" stroke="#1B1530" stroke-width="5"/>
+  <circle cx="392" cy="256" r="22" fill="#F6A8B8" stroke="#1B1530" stroke-width="5"/>
+  <circle cx="256" cy="392" r="22" fill="#F6A8B8" stroke="#1B1530" stroke-width="5"/>
+  <circle cx="120" cy="256" r="22" fill="#F6A8B8" stroke="#1B1530" stroke-width="5"/>
+  <circle cx="256" cy="256" r="16" fill="#E4DBFA"/>
 </g>
 
-<text x="200" y="120" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700" fill="#2B4A6B">Untangle</text>
+<text x="200" y="120" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="700" fill="#E4DBFA">Untangle</text>
 
 </svg>
