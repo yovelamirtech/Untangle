@@ -9,9 +9,12 @@ const STUDIO_LOGO = require('../assets/studio-splash-logo.png');
 const FADE_IN_MS = 700;
 const HOLD_MS = 1200;
 const FADE_OUT_MS = 700;
-// Studio logo's own background (assets/studio_logo/icon-primary.svg), so the
-// screen edge and the logo's rounded square blend into one flat field.
-const BACKGROUND_COLOR = '#5B4B87';
+// Matches the dark-violet hub identity used everywhere outside gameplay
+// (MainMenuScreen/JourneyScreen/SettingsScreen/BadgeCollectionScreen) rather
+// than the studio logo's own isolated purple (#5B4B87) — the logo itself is
+// untouched (it doubles as the App Store icon source), so its rounded square
+// now reads as a card on the app's own background instead of blending flat.
+const BACKGROUND_COLOR = '#1B1530';
 
 interface StudioSplashScreenProps {
   onFinish: () => void;

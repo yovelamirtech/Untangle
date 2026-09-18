@@ -44,6 +44,13 @@ Not one of the numbered phases above — a round of adjustments requested direct
 
 ---
 
+## Ad hoc — studio splash recolor + first test suite (2026-09-18)
+
+- **Studio splash**: `StudioSplashScreen.tsx`'s `BACKGROUND_COLOR` changed from the studio logo's own isolated purple (`#5B4B87`) to the app's dark-violet hub color (`#1B1530`, already shared by MainMenu/Journey/Settings/BadgeCollection) — the studio logo SVGs themselves are untouched (they double as the App Store icon source), so the logo's rounded square now reads as a card floating on the app's own background rather than blending into a flat, unrelated field.
+- **Testing**: added `jest`/`jest-expo` as dev dependencies (none existed before — `npm test` now runs Jest), plus `"types": ["jest"]` in `tsconfig.json` so `tsc --noEmit` doesn't choke on the test globals. Wrote unit tests (`src/__tests__/`) for the framework-free logic modules: `geometry.ts` (segment intersection), `puzzle.ts` (solved-graph generation, scrambling, crossing counting, outer-boundary tracing), `singleLine.ts` (Eulerian-trail single-line-ification), `zones.ts`, `difficulty.ts`, and `palette.ts`. Screens/components (which need React Native rendering, gestures, AsyncStorage, Skia, etc.) were left untested for now — only the pure logic layer.
+
+---
+
 ## Assets already prepared (do not regenerate)
 
 - `assets/stutio_logo/` — the studio's own logo (Yovlez Studio), in three variants: `icon-primary.svg` (with cartridge notch, use for the splash fade), `icon-appstore.svg` (plain square), `wordmark.svg` (icon + "Yovlez STUDIO" text). Note the folder name has a typo (`stutio` not `studio`) — kept as-is unless told to rename it, since renaming means updating every import.
