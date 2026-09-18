@@ -73,7 +73,14 @@ function buildPuzzle(canvasSize: number, level: number, width: number, height: n
 
 interface PuzzleScreenProps {
   initialLevel: number;
+  /** The furthest level reached so far — used only to tell a genuine
+   * first-time zone crossing apart from replaying an old level whose own
+   * zone boundary was already crossed long ago (see onZoneUnlocked). */
+  furthestLevel: number;
   onLevelChange: (level: number) => void;
+  /** Called when a solve crosses into a new zone *for the first time*, so
+   * the Journey map can play a one-time reveal for it. */
+  onZoneUnlocked: () => void;
   onOpenJourney: () => void;
   onOpenSettings: () => void;
   onExitToMenu: () => void;
@@ -81,7 +88,9 @@ interface PuzzleScreenProps {
 
 export default function PuzzleScreen({
   initialLevel,
+  furthestLevel,
   onLevelChange,
+  onZoneUnlocked,
   onOpenJourney,
   onOpenSettings,
   onExitToMenu,
@@ -97,7 +106,9 @@ export default function PuzzleScreen({
       width={width}
       height={height}
       initialLevel={initialLevel}
+      furthestLevel={furthestLevel}
       onLevelChange={onLevelChange}
+      onZoneUnlocked={onZoneUnlocked}
       onOpenJourney={onOpenJourney}
       onOpenSettings={onOpenSettings}
       onExitToMenu={onExitToMenu}
@@ -109,7 +120,9 @@ function PuzzleGame({
   width,
   height,
   initialLevel,
+  furthestLevel,
   onLevelChange,
+  onZoneUnlocked,
   onOpenJourney,
   onOpenSettings,
   onExitToMenu,
@@ -213,10 +226,14 @@ function PuzzleGame({
   const handleSolved = useCallback(() => {
     if (getZoneIndexForLevel(level + 1) !== getZoneIndexForLevel(level)) {
       showInterstitialIfReady();
+      // Only a genuine first-time crossing plays the "new zone" reveal —
+      // replaying an old level whose own zone boundary was already crossed
+      // long ago shouldn't show it again.
+      if (level + 1 > furthestLevel) onZoneUnlocked();
     }
     onLevelChange(level + 1);
     onOpenJourney();
-  }, [level, onLevelChange, onOpenJourney]);
+  }, [level, furthestLevel, onLevelChange, onZoneUnlocked, onOpenJourney]);
 
   // Shared by an actual solve and the dev-only "force solve" button below —
   // both play the same feedback and lead to the same journey-map return.
@@ -425,6 +442,8 @@ function PuzzleGame({
           </Text>
         </View>
         <View style={styles.buttonRow}>
+          {/* DEV-ONLY block: skip-to-solved button and the level-jump picker
+              below. Strip both before release. */}
           {__DEV__ && !solved && (
             <Pressable style={styles.fitButton} onPress={forceSolve}>
               <Text style={styles.fitButtonText}>Test: Solve</Text>
@@ -436,18 +455,21 @@ function PuzzleGame({
           <Pressable style={styles.fitButton} onPress={resetCamera}>
             <Text style={styles.fitButtonText}>Fit</Text>
           </Pressable>
-          <Pressable
-            style={styles.fitButton}
-            onPress={() => {
-              setLevelInput(String(level));
-              setLevelPickerVisible(true);
-            }}
-          >
-            <Text style={styles.fitButtonText}>Lvl {level}</Text>
-          </Pressable>
+          {__DEV__ && (
+            <Pressable
+              style={styles.fitButton}
+              onPress={() => {
+                setLevelInput(String(level));
+                setLevelPickerVisible(true);
+              }}
+            >
+              <Text style={styles.fitButtonText}>Lvl {level}</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
+      {/* DEV-ONLY: lets testing jump straight to any level. Strip before release. */}
       <Modal
           visible={levelPickerVisible}
           transparent

@@ -34,13 +34,14 @@ export default function App() {
   // "hint -> earned" reveal animation the next time it's shown; cleared
   // once that animation has been shown.
   const [justSolvedBadgeId, setJustSolvedBadgeId] = useState<string | null>(null);
+  // Set when a solve crosses into a new zone, so the Journey map can play a
+  // one-time full-screen reveal for it; cleared once that's been shown.
+  const [justUnlockedZone, setJustUnlockedZone] = useState(false);
   // Where "Back" from Settings should return to — it can be opened from
-  // either the main menu or from inside a game screen.
+  // any other screen (main menu, a game screen, Journey, Badge Challenge).
+  // Every other screen uses a plain "home" button instead (always straight
+  // to the main menu), so only Settings needs this.
   const screenBeforeSettings = useRef<Screen>('menu');
-  // Where "Back" from the Journey path should return to — it can be opened
-  // from the main menu (no game in progress to return to) or from inside a
-  // game screen (via its own "Journey" button).
-  const screenBeforeJourney = useRef<Screen>('menu');
 
   useEffect(() => {
     loadProgress().then((progress) => setFurthestLevel(progress.furthestLevel));
@@ -68,14 +69,21 @@ export default function App() {
     setScreen('settings');
   }, [screen]);
 
-  const openJourney = useCallback(() => {
-    screenBeforeJourney.current = screen;
-    setScreen('journey');
-  }, [screen]);
+  const openJourney = useCallback(() => setScreen('journey'), []);
 
   const handleResetProgress = useCallback(async () => {
     await Promise.all([resetProgress(), resetBadgeProgress()]);
     setFurthestLevel(1);
+    setScreen('menu');
+  }, []);
+
+  // Dev-only: lets a session on the Journey map reset just journey progress
+  // without going through Settings — see the __DEV__ guard around its
+  // button in JourneyScreen. Strip alongside that button before release.
+  const handleDevResetJourneyProgress = useCallback(async () => {
+    await resetProgress();
+    setFurthestLevel(1);
+    setActiveLevel(null);
     setScreen('menu');
   }, []);
 
@@ -112,7 +120,8 @@ export default function App() {
       )}
       {screen === 'badges' && (
         <BadgeCollectionScreen
-          onClose={() => setScreen('menu')}
+          onExitToMenu={() => setScreen('menu')}
+          onOpenSettings={openSettings}
           onSelectBadge={(badgeId) => {
             setActiveBadgeId(badgeId);
             setScreen('badgePuzzle');
@@ -124,7 +133,8 @@ export default function App() {
       {screen === 'badgePuzzle' && activeBadgeId && (
         <BadgePuzzleScreen
           badgeId={activeBadgeId}
-          onBack={() => setScreen('badges')}
+          onExitToMenu={() => setScreen('menu')}
+          onOpenSettings={openSettings}
           onSolved={() => {
             setJustSolvedBadgeId(activeBadgeId);
             setScreen('badges');
@@ -134,7 +144,9 @@ export default function App() {
       {screen === 'game' && (
         <PuzzleScreen
           initialLevel={activeLevel ?? furthestLevel}
+          furthestLevel={furthestLevel}
           onLevelChange={handleLevelChange}
+          onZoneUnlocked={() => setJustUnlockedZone(true)}
           onOpenJourney={openJourney}
           onOpenSettings={openSettings}
           onExitToMenu={() => setScreen('menu')}
@@ -143,11 +155,15 @@ export default function App() {
       {screen === 'journey' && (
         <JourneyScreen
           furthestLevel={furthestLevel}
-          onClose={() => setScreen(screenBeforeJourney.current)}
+          onExitToMenu={() => setScreen('menu')}
+          onOpenSettings={openSettings}
           onPlay={(level) => {
             setActiveLevel(level);
             setScreen('game');
           }}
+          justUnlockedZone={justUnlockedZone}
+          onZoneRevealShown={() => setJustUnlockedZone(false)}
+          onDevResetProgress={handleDevResetJourneyProgress}
         />
       )}
       <StatusBar style={screen === 'game' ? 'dark' : 'light'} />

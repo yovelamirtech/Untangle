@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Fragment, useEffect, useMemo, useRef } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import AdBanner from './AdBanner';
-import { getZoneIndexForLevel, isWaypointLevel, LEVELS_PER_ZONE, ZONES } from './zones';
+import { getZoneForLevel, getZoneIndexForLevel, isWaypointLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
 /** Tiny deterministic PRNG (mulberry32) so a zone's decorative star scatter
  * is stable across re-renders instead of jumping around every time. */
@@ -35,7 +35,6 @@ function getZoneStars(band: { top: number; height: number; startLevel: number },
 }
 
 const ROW_HEIGHT = 60;
-const LOOKAHEAD_LEVELS = 4;
 const MIN_DISPLAY_LEVELS = 12;
 const DOT_RADIUS = 12;
 const WAYPOINT_RADIUS = 17;
@@ -43,6 +42,8 @@ const ARROW_SIZE = 30;
 const ARROW_GAP = 8;
 const ARROW_BOB_DISTANCE = 8;
 const ARROW_BOB_DURATION_MS = 900;
+const ZONE_REVEAL_HOLD_MS = 900;
+const ZONE_REVEAL_FADE_MS = 900;
 
 const COLORS = {
   screenBg: '#1B1530',
@@ -54,22 +55,49 @@ const COLORS = {
   text: '#E4DBFA',
   textDim: 'rgba(228,219,250,0.4)',
   zoneLabel: 'rgba(228,219,250,0.75)',
+  // The next zone (not yet reached) is a flat, neutral grey rather than its
+  // real palette — so its own colors stay a surprise until it's reached.
+  futureZoneBg: '#232030',
+  futureZoneLabel: 'rgba(228,219,250,0.35)',
+  iconButtonBg: 'rgba(0,0,0,0.35)',
+  devButtonBg: 'rgba(232,104,138,0.25)',
+  devButtonText: '#F6A8B8',
 };
 
 interface JourneyScreenProps {
   furthestLevel: number;
-  onClose: () => void;
+  onExitToMenu: () => void;
+  onOpenSettings: () => void;
   /** Opens the given level for play — any unlocked stage (1..furthestLevel)
    * can be tapped; replaying an already-solved one doesn't affect
    * progression either way. */
   onPlay: (level: number) => void;
+  /** True right after a solve crossed into a new zone — plays a one-time
+   * full-screen reveal for it. */
+  justUnlockedZone: boolean;
+  /** Called once the reveal has been shown, so it isn't replayed on a later visit. */
+  onZoneRevealShown: () => void;
+  /** Dev-only: resets journey progress back to level 1. */
+  onDevResetProgress: () => void;
 }
 
-export default function JourneyScreen({ furthestLevel, onClose, onPlay }: JourneyScreenProps) {
+export default function JourneyScreen({
+  furthestLevel,
+  onExitToMenu,
+  onOpenSettings,
+  onPlay,
+  justUnlockedZone,
+  onZoneRevealShown,
+  onDevResetProgress,
+}: JourneyScreenProps) {
   const scrollRef = useRef<ScrollView>(null);
   const { width, height: windowHeight } = useWindowDimensions();
 
-  const totalLevels = Math.max(MIN_DISPLAY_LEVELS, furthestLevel + LOOKAHEAD_LEVELS);
+  const currentZoneOrdinal = Math.floor((furthestLevel - 1) / LEVELS_PER_ZONE);
+  // Shows the whole current zone (including levels not reached yet, greyed
+  // out) plus the whole next zone (see zoneBands below, rendered flat grey
+  // with its name hidden) — not just a small fixed lookahead.
+  const totalLevels = Math.max(MIN_DISPLAY_LEVELS, (currentZoneOrdinal + 2) * LEVELS_PER_ZONE);
   const centerX = width / 2;
   // Scales with the screen instead of a fixed pixel amount, so the path
   // actually zigzags across the full device width (small phone or large
@@ -126,18 +154,42 @@ export default function JourneyScreen({ furthestLevel, onClose, onPlay }: Journe
     return () => loop.stop();
   }, [bob]);
 
+  // Full-screen "new zone" reveal: holds a solid cover in the new zone's
+  // own color (with its name) briefly, then fades to show the map
+  // underneath — shown once, right after a solve crosses into a new zone.
+  const [showZoneReveal, setShowZoneReveal] = useState(justUnlockedZone);
+  const zoneRevealOpacity = useRef(new Animated.Value(justUnlockedZone ? 1 : 0)).current;
+  useEffect(() => {
+    if (!justUnlockedZone) return;
+    const timer = setTimeout(() => {
+      Animated.timing(zoneRevealOpacity, {
+        toValue: 0,
+        duration: ZONE_REVEAL_FADE_MS,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }).start(() => setShowZoneReveal(false));
+    }, ZONE_REVEAL_HOLD_MS);
+    onZoneRevealShown();
+    return () => clearTimeout(timer);
+    // Runs once, only for the mount that actually just unlocked a zone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const newZone = getZoneForLevel(furthestLevel);
+
   const zoneBands = useMemo(() => {
-    const bands: { top: number; height: number; zoneIndex: number; startLevel: number }[] = [];
+    const bands: { top: number; height: number; zoneIndex: number; startLevel: number; ordinal: number }[] = [];
     let level = 1;
     while (level <= totalLevels) {
       const zoneIndex = getZoneIndexForLevel(level);
-      const zoneStart = Math.floor((level - 1) / LEVELS_PER_ZONE) * LEVELS_PER_ZONE + 1;
+      const ordinal = Math.floor((level - 1) / LEVELS_PER_ZONE);
+      const zoneStart = ordinal * LEVELS_PER_ZONE + 1;
       const zoneEnd = Math.min(zoneStart + LEVELS_PER_ZONE - 1, totalLevels);
       bands.push({
         top: ROW_HEIGHT * (totalLevels - zoneEnd),
         height: ROW_HEIGHT * (zoneEnd - zoneStart + 1),
         zoneIndex,
         startLevel: zoneStart,
+        ordinal,
       });
       level = zoneEnd + 1;
     }
@@ -147,10 +199,20 @@ export default function JourneyScreen({ furthestLevel, onClose, onPlay }: Journe
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Journey</Text>
-        <Pressable style={styles.closeButton} onPress={onClose}>
-          <Text style={styles.closeButtonText}>Back</Text>
-        </Pressable>
+        <View style={styles.headerGroup}>
+          <Pressable style={styles.iconButton} onPress={onExitToMenu} hitSlop={12}>
+            <Ionicons name="home-outline" size={20} color={COLORS.text} />
+          </Pressable>
+          <Pressable style={styles.iconButton} onPress={onOpenSettings} hitSlop={12}>
+            <Ionicons name="settings-outline" size={20} color={COLORS.text} />
+          </Pressable>
+          <Text style={styles.title}>Journey</Text>
+        </View>
+        {__DEV__ && (
+          <Pressable style={styles.devButton} onPress={onDevResetProgress}>
+            <Text style={styles.devButtonText}>Reset</Text>
+          </Pressable>
+        )}
       </View>
       <ScrollView
         ref={scrollRef}
@@ -166,31 +228,35 @@ export default function JourneyScreen({ furthestLevel, onClose, onPlay }: Journe
                 y={band.top}
                 width={width}
                 height={band.height}
-                fill={ZONES[band.zoneIndex].background}
+                fill={band.ordinal > currentZoneOrdinal ? COLORS.futureZoneBg : ZONES[band.zoneIndex].background}
               />
             ))}
-            {zoneBands.map((band) =>
-              getZoneStars(band, width).map((star, i) => (
-                <Circle
-                  key={`star-${band.startLevel}-${i}`}
-                  cx={star.x}
-                  cy={star.y}
-                  r={star.r}
-                  fill={COLORS.text}
-                  opacity={star.opacity}
-                />
-              ))
-            )}
+            {zoneBands
+              .filter((band) => band.ordinal <= currentZoneOrdinal)
+              .map((band) =>
+                getZoneStars(band, width).map((star, i) => (
+                  <Circle
+                    key={`star-${band.startLevel}-${i}`}
+                    cx={star.x}
+                    cy={star.y}
+                    r={star.r}
+                    fill={COLORS.text}
+                    opacity={star.opacity}
+                  />
+                ))
+              )}
             {zoneBands.map((band) => {
-              const name = ZONES[band.zoneIndex].name;
+              const isFuture = band.ordinal > currentZoneOrdinal;
+              const name = isFuture ? '???' : ZONES[band.zoneIndex].name;
+              const labelColor = isFuture ? COLORS.futureZoneLabel : COLORS.zoneLabel;
               // Shown near both the top and bottom of the band — tall zones
               // (21 levels of scrolling) would otherwise only show their
               // name once, easy to scroll straight past.
               const labelYs = [band.top + 34, band.top + band.height - 16];
               return labelYs.map((y, i) => (
                 <Fragment key={`label-${band.startLevel}-${i}`}>
-                  <Circle cx={10} cy={y - 7} r={2.5} fill={COLORS.zoneLabel} />
-                  <SvgText x={22} y={y} fill={COLORS.zoneLabel} fontSize={26} fontWeight="800">
+                  <Circle cx={10} cy={y - 7} r={2.5} fill={labelColor} />
+                  <SvgText x={22} y={y} fill={labelColor} fontSize={26} fontWeight="800">
                     {name}
                   </SvgText>
                 </Fragment>
@@ -277,6 +343,15 @@ export default function JourneyScreen({ furthestLevel, onClose, onPlay }: Journe
         </View>
       </ScrollView>
       <AdBanner />
+
+      {showZoneReveal && (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.zoneReveal, { backgroundColor: newZone.background, opacity: zoneRevealOpacity }]}
+        >
+          <Text style={styles.zoneRevealText}>✨ {newZone.name}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -297,21 +372,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
   },
+  headerGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
+    backgroundColor: COLORS.iconButtonBg,
+    padding: 8,
+    borderRadius: 14,
+  },
   title: {
     color: COLORS.text,
     fontSize: 20,
     fontWeight: '700',
+    marginLeft: 4,
   },
-  closeButton: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingHorizontal: 14,
+  devButton: {
+    backgroundColor: COLORS.devButtonBg,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
   },
-  closeButtonText: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '600',
+  devButtonText: {
+    color: COLORS.devButtonText,
+    fontSize: 13,
+    fontWeight: '700',
   },
   tapTarget: {
     position: 'absolute',
@@ -321,5 +407,19 @@ const styles = StyleSheet.create({
   },
   arrow: {
     position: 'absolute',
+  },
+  zoneReveal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoneRevealText: {
+    color: COLORS.text,
+    fontSize: 28,
+    fontWeight: '800',
   },
 });

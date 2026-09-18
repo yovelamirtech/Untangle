@@ -13,13 +13,15 @@ import Animated, {
 import Svg, { Circle, Line } from 'react-native-svg';
 
 import { Badge, BADGES, getBadgeSolvedGraph } from './badges';
-import { BadgeProgress, BadgeStatus, getBadgeStatus, loadBadgeProgress } from './badgeProgress';
+import { BadgeProgress, BadgeStatus, getBadgeStatus, loadBadgeProgress, resetBadgeProgress } from './badgeProgress';
 
 const COLORS = {
   screenBg: '#1B1530',
   text: '#E4DBFA',
   textDim: 'rgba(228,219,250,0.4)',
-  closeButton: 'rgba(0,0,0,0.35)',
+  iconButtonBg: 'rgba(0,0,0,0.35)',
+  devButtonBg: 'rgba(232,104,138,0.25)',
+  devButtonText: '#F6A8B8',
   cardBg: 'rgba(228,219,250,0.08)',
   cardBgDisabled: 'rgba(228,219,250,0.03)',
   cardBgSolved: 'rgba(127,217,185,0.14)',
@@ -33,7 +35,8 @@ const COLORS = {
 };
 
 interface BadgeCollectionScreenProps {
-  onClose: () => void;
+  onExitToMenu: () => void;
+  onOpenSettings: () => void;
   onSelectBadge: (badgeId: string) => void;
   /** The badge that was just solved, so its card can play a one-time
    * "hint -> earned" reveal the next time this screen is shown. */
@@ -120,6 +123,15 @@ function BadgeCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Keeps the card in sync with status changes other than the one-time
+  // justSolved reveal above — notably the dev-only reset button, which can
+  // flip a card straight back from solved to not-started while it's still
+  // mounted (no need to animate that one, just snap to the plain look).
+  useEffect(() => {
+    if (justSolved) return;
+    reveal.value = solved ? 1 : 0;
+  }, [solved, justSolved, reveal]);
+
   const cardStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(reveal.value, [0, 1], [COLORS.cardBg, COLORS.cardBgSolved]),
     borderColor: interpolateColor(reveal.value, [0, 1], [COLORS.cardBorder, COLORS.cardBorderSolved]),
@@ -162,7 +174,8 @@ function BadgeCard({
 }
 
 export default function BadgeCollectionScreen({
-  onClose,
+  onExitToMenu,
+  onOpenSettings,
   onSelectBadge,
   justSolvedBadgeId,
   onJustSolvedShown,
@@ -180,13 +193,30 @@ export default function BadgeCollectionScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Dev-only: resets badge progress and refreshes this screen in place —
+  // see the __DEV__ guard around its button below. Strip alongside that
+  // button before release.
+  const handleDevReset = () => {
+    resetBadgeProgress().then(() => setProgress({}));
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Badge Challenge</Text>
-        <Pressable style={styles.closeButton} onPress={onClose}>
-          <Text style={styles.closeButtonText}>Back</Text>
-        </Pressable>
+        <View style={styles.headerGroup}>
+          <Pressable style={styles.iconButton} onPress={onExitToMenu} hitSlop={12}>
+            <Ionicons name="home-outline" size={20} color={COLORS.text} />
+          </Pressable>
+          <Pressable style={styles.iconButton} onPress={onOpenSettings} hitSlop={12}>
+            <Ionicons name="settings-outline" size={20} color={COLORS.text} />
+          </Pressable>
+          <Text style={styles.title}>Badge Challenge</Text>
+        </View>
+        {__DEV__ && (
+          <Pressable style={styles.devButton} onPress={handleDevReset}>
+            <Text style={styles.devButtonText}>Reset</Text>
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.grid}>
@@ -217,21 +247,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
   },
+  headerGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
+    backgroundColor: COLORS.iconButtonBg,
+    padding: 8,
+    borderRadius: 14,
+  },
   title: {
     color: COLORS.text,
     fontSize: 20,
     fontWeight: '700',
+    marginLeft: 4,
   },
-  closeButton: {
-    backgroundColor: COLORS.closeButton,
-    paddingHorizontal: 14,
+  devButton: {
+    backgroundColor: COLORS.devButtonBg,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
   },
-  closeButtonText: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '600',
+  devButtonText: {
+    color: COLORS.devButtonText,
+    fontSize: 13,
+    fontWeight: '700',
   },
   grid: {
     flexDirection: 'row',
@@ -242,7 +283,10 @@ const styles = StyleSheet.create({
   },
   cardTouchable: {
     width: '47%',
-    aspectRatio: 1,
+    // Taller than wide — a plain square doesn't leave enough room for the
+    // thumbnail plus title, hint and status text without the last line
+    // (the "Earned" status) getting clipped against the card's own border.
+    aspectRatio: 0.8,
   },
   card: {
     flex: 1,

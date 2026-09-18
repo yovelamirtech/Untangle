@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Canvas, Circle, Group, Rect } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -157,11 +158,12 @@ function applySavedPositions(graph: Graph, saved: Node[] | undefined): Graph {
 
 interface BadgePuzzleScreenProps {
   badgeId: string;
-  onBack: () => void;
+  onExitToMenu: () => void;
+  onOpenSettings: () => void;
   onSolved: () => void;
 }
 
-export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePuzzleScreenProps) {
+export default function BadgePuzzleScreen({ badgeId, onExitToMenu, onOpenSettings, onSolved }: BadgePuzzleScreenProps) {
   const { width, height } = useWindowDimensions();
   const badge = getBadge(badgeId);
   // canvasSize is stored alongside the graph (not recomputed later from
@@ -207,7 +209,8 @@ export default function BadgePuzzleScreen({ badgeId, onBack, onSolved }: BadgePu
       height={height}
       initialGraph={built.graph}
       canvasSize={built.canvasSize}
-      onBack={onBack}
+      onExitToMenu={onExitToMenu}
+      onOpenSettings={onOpenSettings}
       onSolved={onSolved}
     />
   );
@@ -220,7 +223,8 @@ function BadgeGame({
   height,
   initialGraph,
   canvasSize,
-  onBack,
+  onExitToMenu,
+  onOpenSettings,
   onSolved,
 }: {
   badgeId: string;
@@ -229,7 +233,8 @@ function BadgeGame({
   height: number;
   initialGraph: Graph;
   canvasSize: number;
-  onBack: () => void;
+  onExitToMenu: () => void;
+  onOpenSettings: () => void;
   onSolved: () => void;
 }) {
   // The camera fits to the drawing's own footprint (canvas minus margin),
@@ -467,14 +472,18 @@ function BadgeGame({
 
       <View style={styles.overlay}>
         <View style={styles.leftGroup}>
-          <Pressable style={styles.pillButton} onPress={onBack} hitSlop={12}>
-            <Text style={styles.pillButtonText}>{'‹'} Back</Text>
+          <Pressable style={styles.pillButton} onPress={onExitToMenu} hitSlop={12}>
+            <Ionicons name="home-outline" size={18} color={COLORS.subtitle} />
+          </Pressable>
+          <Pressable style={styles.pillButton} onPress={onOpenSettings} hitSlop={12}>
+            <Ionicons name="settings-outline" size={18} color={COLORS.subtitle} />
           </Pressable>
           <Text style={[styles.subtitle, solved && styles.subtitleSolved]}>
             {solved ? `${badgeName} — Solved!` : `${badgeName} · ${crossings} crossing${crossings === 1 ? '' : 's'}`}
           </Text>
         </View>
         <View style={styles.rightGroup}>
+          {/* DEV-ONLY: skips straight to the solve flow, see celebrateSolve/forceSolve above. Strip before release. */}
           {__DEV__ && !solved && (
             <Pressable style={styles.pillButton} onPress={forceSolve}>
               <Text style={styles.pillButtonText}>Test: Solve</Text>
