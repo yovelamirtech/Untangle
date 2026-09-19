@@ -53,12 +53,23 @@ function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, scale, withShadow = fal
   const showShadow = withShadow && devFlags.nodeShadow;
 
   // Keep dots readable at any zoom level: grow their canvas-space radius as
-  // the camera zooms out, capped so they don't balloon at extreme zoom-out.
+  // the camera zooms out, capped at both ends so they don't balloon at
+  // extreme zoom-out *or* extreme zoom-in. This draws inside a Group scaled
+  // by `scale`, so the actual on-screen size is canvasRadius * scale — the
+  // zoom-in cap has to be expressed the same way as the zoom-out one
+  // (a screen-space budget divided by scale), or it silently stops doing
+  // anything once scale passes a certain point (a fixed canvas-space value
+  // only bounds the pre-scale number, not what lands on screen) and lets
+  // radius grow unbounded — worse the further zoomed in, and each node
+  // costs more to paint (more so for the shadow/gradient ones) with a
+  // bigger footprint.
   // Recomputed live every frame — cheap here since Skia batches the whole
   // scene into one GPU draw call instead of updating many native views.
   const r = useDerivedValue(() => {
     const desiredCanvasRadius = 7 / scale.value;
-    const screenRadius = Math.min(Math.max(radius, desiredCanvasRadius), radius * 4);
+    const zoomOutCeiling = radius * 4;
+    const zoomInCeiling = (radius * 4) / scale.value;
+    const screenRadius = Math.min(Math.max(radius, desiredCanvasRadius), zoomOutCeiling, zoomInCeiling);
     return screenRadius + pulse.value * 4;
   }, [radius, scale, pulse]);
 

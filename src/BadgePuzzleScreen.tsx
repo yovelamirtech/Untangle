@@ -446,7 +446,13 @@ function BadgeGame({
     [translateX, translateY, scale]
   );
 
-  const lineWidth = useDerivedValue(() => Math.min(Math.max(2, 1.6 / scale.value), 10), [scale]);
+  // No min/max clamp — see the matching comment in PuzzleScreen.tsx. A
+  // canvas-space clamp here doesn't bound the actual on-screen result (this
+  // draws inside a Group scaled by `scale`), so it let rope thickness grow
+  // unbounded past a certain zoom level instead of staying constant — with
+  // a badge's hundreds of edges, that's the main reason dragging felt
+  // harder the further zoomed in.
+  const lineWidth = useDerivedValue(() => 1.6 / scale.value, [scale]);
 
   const solved = crossings === 0;
 

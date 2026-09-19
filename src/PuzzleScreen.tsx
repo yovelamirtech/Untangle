@@ -399,8 +399,17 @@ function PuzzleGame({
   // A single shared derived value for line thickness, reused by every edge:
   // stays a constant on-screen width regardless of zoom (computed live,
   // every frame — cheap under Skia since the whole scene is one draw call).
+  // No min/max clamp here: the Group this is drawn inside gets scaled by
+  // `scale`, so canvasWidth * scale is what actually lands on screen — a
+  // clamp on this pre-scale value only bounds that *canvas* number, not the
+  // screen result, so it silently stopped capping anything once scale grew
+  // past ~1.5x (2.2 / scale.value fell below a since-removed 3-unit floor,
+  // after which width grew unbounded — quadratic paint-area growth once
+  // combined with edge length also scaling — the more zoomed in, the worse).
+  // scale itself is already bounded ([minScale, maxScale] below), so this
+  // stays within a sane range without any extra clamping.
   const lineWidth = useDerivedValue(
-    () => Math.min(Math.max(3, 2.2 / scale.value), 15),
+    () => 2.2 / scale.value,
     [scale]
   );
 
