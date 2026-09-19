@@ -51,6 +51,12 @@ Not one of the numbered phases above — a round of adjustments requested direct
 
 ---
 
+## Ad hoc — incremental crossing count on drag (2026-09-19)
+
+- **Performance**: a drag only ever moves one node at a time, but `recomputeCrossings` (in both `PuzzleScreen.tsx` and `BadgePuzzleScreen.tsx`) was calling `countCrossings`, which re-checks every pair of edges (O(E²)), on every throttled drag update — most of those pairs' crossing status can't have changed since the previous check. Added `createCrossingTracker`/`updateCrossingTracker` (`src/puzzle.ts`) which cache each edge pair's last-known crossing state and, on each move, only re-check the pairs touching the node that actually moved (O(degree × E)). Both screens now build a tracker once per puzzle (recreated in `PuzzleScreen`'s `goToLevel`) and feed it just the moved node's id/position instead of rebuilding the full node list every drag frame. Existing `countCrossings` is unchanged and still used for one-off counts (initial load, scramble generation). Added tests (`src/__tests__/puzzle.test.ts`) checking the tracker stays in sync with `countCrossings` across single and sequential moves.
+
+---
+
 ## Assets already prepared (do not regenerate)
 
 - `assets/stutio_logo/` — the studio's own logo (Yovlez Studio), in three variants: `icon-primary.svg` (with cartridge notch, use for the splash fade), `icon-appstore.svg` (plain square), `wordmark.svg` (icon + "Yovlez STUDIO" text). Note the folder name has a typo (`stutio` not `studio`) — kept as-is unless told to rename it, since renaming means updating every import.

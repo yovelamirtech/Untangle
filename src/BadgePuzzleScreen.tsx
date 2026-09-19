@@ -21,7 +21,16 @@ import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import { ENDPOINT_ACCENT } from './palette';
-import { countCrossings, getEndpointIds, Graph, Node, scrambleBadgeGraph } from './puzzle';
+import {
+  countCrossings,
+  createCrossingTracker,
+  CrossingTracker,
+  getEndpointIds,
+  Graph,
+  Node,
+  scrambleBadgeGraph,
+  updateCrossingTracker,
+} from './puzzle';
 import { BADGE_ZOOM_TIGHTNESS, clampTranslate, getBadgeCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 
@@ -261,6 +270,14 @@ function BadgeGame({
   const [celebrating, setCelebrating] = useState(false);
   const crossingsRef = useRef(crossings);
   const solvedRef = useRef(crossings === 0);
+  // Lazily initialized (not `useRef(createCrossingTracker(graph))`, which
+  // would rebuild it — an O(E^2) pass — on every render). Badges can have a
+  // few hundred nodes/edges, so this matters much more here than in a
+  // normal level.
+  const crossingTrackerRef = useRef<CrossingTracker | null>(null);
+  if (crossingTrackerRef.current === null) {
+    crossingTrackerRef.current = createCrossingTracker(graph);
+  }
 
   const initialCamera = getFitCamera(canvasSize, width, height, focusSize);
   const scale = useSharedValue(initialCamera.scale);
@@ -307,19 +324,26 @@ function BadgeGame({
     setTimeout(onSolved, ADVANCE_DELAY_MS);
   }, [badgeId, burst, onSolved, pulse]);
 
-  const recomputeCrossings = useCallback(() => {
-    const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
-    const newCrossings = countCrossings({ nodes: currentNodes, edges: graph.edges });
-    const wasSolved = crossingsRef.current === 0;
-    crossingsRef.current = newCrossings;
-    setCrossings(newCrossings);
+  // Only the dragged node's position actually changed since the last call,
+  // so the tracker only re-checks the edge pairs touching it instead of
+  // recounting every pair in the graph (see updateCrossingTracker) — this
+  // is what keeps a several-hundred-edge badge smooth while dragging.
+  const recomputeCrossings = useCallback(
+    (movedNodeId: number) => {
+      const node = nodeValueById(movedNodeId);
+      const newCrossings = updateCrossingTracker(crossingTrackerRef.current!, movedNodeId, node.x.value, node.y.value);
+      const wasSolved = crossingsRef.current === 0;
+      crossingsRef.current = newCrossings;
+      setCrossings(newCrossings);
 
-    if (newCrossings === 0 && !wasSolved) {
-      celebrateSolve();
-    } else {
-      persistPositions();
-    }
-  }, [celebrateSolve, nodeValues, graph.edges, persistPositions]);
+      if (newCrossings === 0 && !wasSolved) {
+        celebrateSolve();
+      } else {
+        persistPositions();
+      }
+    },
+    [celebrateSolve, nodeValueById, persistPositions]
+  );
 
   // Dev-only: triggers the exact same solve feedback/persistence path as an
   // actual solve, without needing to untangle the (possibly huge) puzzle by
@@ -373,7 +397,7 @@ function BadgeGame({
         }
         dragUpdateCount.value += 1;
         if (dragUpdateCount.value % DRAG_THROTTLE_UPDATES === 0) {
-          runOnJS(recomputeCrossings)();
+          runOnJS(recomputeCrossings)(draggedNodeId.value);
         }
       } else {
         translateX.value = clampTranslate(translateX.value + dxScreen, scale.value, canvasSize, width);
@@ -382,7 +406,7 @@ function BadgeGame({
     })
     .onEnd(() => {
       if (draggedNodeId.value !== -1) {
-        runOnJS(recomputeCrossings)();
+        runOnJS(recomputeCrossings)(draggedNodeId.value);
       }
       draggedNodeId.value = -1;
     });
