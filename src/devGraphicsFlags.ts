@@ -2,22 +2,20 @@ import { useSyncExternalStore } from 'react';
 
 /**
  * Dev-only kill switches for the graphics-polish effects (gradient nodes,
- * layered node shadow, rope glow) so they can be A/B'd on a real device
- * while testing, without a rebuild. In-memory only — resets on app
+ * layered node shadow, parallax background) so they can be A/B'd on a real
+ * device while testing, without a rebuild. In-memory only — resets on app
  * restart — and only ever surfaced through a `__DEV__`-gated panel; the
  * effects themselves always default to on.
  */
 export interface DevGraphicsFlags {
   nodeGradient: boolean;
   nodeShadow: boolean;
-  edgeGlow: boolean;
   parallax: boolean;
 }
 
 let flags: DevGraphicsFlags = {
   nodeGradient: true,
   nodeShadow: true,
-  edgeGlow: true,
   parallax: true,
 };
 
