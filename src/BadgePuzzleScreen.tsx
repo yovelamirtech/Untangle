@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Canvas, Circle, Group, Rect } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -522,7 +522,12 @@ function BadgeGame({
             {solved ? `${badgeName} — Solved!` : `${badgeName} · ${crossings} crossing${crossings === 1 ? '' : 's'}`}
           </Text>
         </View>
-        <View style={styles.rightGroup}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.rightGroup}
+          contentContainerStyle={styles.rightGroupContent}
+        >
           {/* DEV-ONLY: skips straight to the solve flow, see celebrateSolve/forceSolve above. Strip before release. */}
           {__DEV__ && !solved && (
             <Pressable style={styles.pillButton} onPress={forceSolve}>
@@ -537,7 +542,7 @@ function BadgeGame({
               <Text style={styles.pillButtonText}>FX</Text>
             </Pressable>
           )}
-        </View>
+        </ScrollView>
       </View>
 
       {/* DEV-ONLY: A/B the graphics-polish effects on a real device. Strip before release. */}
@@ -582,7 +587,6 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingTop: 56,
     paddingHorizontal: 20,
   },
@@ -593,9 +597,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   rightGroup: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  rightGroupContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    justifyContent: 'flex-end',
+    paddingLeft: 8,
   },
   pillButton: {
     backgroundColor: COLORS.overlayBg,

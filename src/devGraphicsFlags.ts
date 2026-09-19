@@ -14,7 +14,7 @@ export interface DevGraphicsFlags {
   parallax: boolean;
 }
 
-const flags: DevGraphicsFlags = {
+let flags: DevGraphicsFlags = {
   nodeGradient: true,
   nodeShadow: true,
   edgeGlow: true,
@@ -37,7 +37,11 @@ function getSnapshot(): DevGraphicsFlags {
 }
 
 export function setDevGraphicsFlag(key: keyof DevGraphicsFlags, value: boolean) {
-  flags[key] = value;
+  // A new object, not a mutation — useSyncExternalStore only re-renders
+  // subscribers when getSnapshot() returns a value that fails Object.is
+  // against the previous one, so mutating `flags` in place here silently
+  // made every toggle a no-op.
+  flags = { ...flags, [key]: value };
   notify();
 }
 

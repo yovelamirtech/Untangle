@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Canvas, Group, Rect } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   makeMutable,
@@ -474,7 +474,12 @@ function PuzzleGame({
             {solved ? 'Solved!' : `${crossings} crossing${crossings === 1 ? '' : 's'}`}
           </Text>
         </View>
-        <View style={styles.buttonRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.buttonRow}
+          contentContainerStyle={styles.buttonRowContent}
+        >
           {/* DEV-ONLY block: skip-to-solved button and the level-jump picker
               below. Strip both before release. */}
           {__DEV__ && !solved && (
@@ -504,7 +509,7 @@ function PuzzleGame({
               <Text style={styles.fitButtonText}>Lvl {level}</Text>
             </Pressable>
           )}
-        </View>
+        </ScrollView>
       </View>
 
       {/* DEV-ONLY: lets testing jump straight to any level. Strip before release. */}
@@ -577,7 +582,6 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingTop: 56,
     paddingHorizontal: 20,
   },
@@ -585,6 +589,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   settingsButton: {
     backgroundColor: COLORS.overlayBg,
@@ -605,8 +610,14 @@ const styles = StyleSheet.create({
     color: COLORS.subtitleSolved,
   },
   buttonRow: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  buttonRowContent: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    paddingLeft: 8,
   },
   fitButton: {
     backgroundColor: COLORS.overlayBg,
