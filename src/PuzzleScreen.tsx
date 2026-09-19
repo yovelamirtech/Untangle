@@ -16,7 +16,9 @@ import {
 import { showInterstitialIfReady } from './ads';
 import { getDifficultyForLevel, getMinCrossingsForLevel } from './difficulty';
 import DevGraphicsPanel from './DevGraphicsPanel';
+import { useDevGraphicsFlags } from './devGraphicsFlags';
 import { getPaletteForLevel } from './palette';
+import ParallaxBackground from './ParallaxBackground';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import {
@@ -31,6 +33,7 @@ import {
 } from './puzzle';
 import { clampTranslate, getCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
+import { useDeviceTilt } from './useDeviceTilt';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
 /** Quick-jump targets for the level picker: level 1 plus both sides of every zone boundary. */
@@ -404,8 +407,14 @@ function PuzzleGame({
   const solved = crossings === 0;
   const palette = getPaletteForLevel(level);
 
+  const devFlags = useDevGraphicsFlags();
+  const tilt = useDeviceTilt(devFlags.parallax);
+
   return (
     <View style={[styles.container, { backgroundColor: palette.background }]}>
+      {devFlags.parallax && (
+        <ParallaxBackground width={width} height={height} tilt={tilt} colors={[palette.rope, palette.node, palette.endpoint]} />
+      )}
       <GestureDetector gesture={cameraGesture}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>

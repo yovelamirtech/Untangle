@@ -9,6 +9,7 @@ const ROWS: { key: keyof DevGraphicsFlags; label: string }[] = [
   { key: 'nodeGradient', label: 'Node gradient' },
   { key: 'nodeShadow', label: 'Node shadow' },
   { key: 'edgeGlow', label: 'Rope glow' },
+  { key: 'parallax', label: 'Parallax background' },
 ];
 
 interface Props {

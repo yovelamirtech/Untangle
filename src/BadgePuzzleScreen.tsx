@@ -18,10 +18,12 @@ import Animated, {
 import { getBadge, getBadgeNodeCount, getBadgeSolvedGraph } from './badges';
 import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './badgeProgress';
 import DevGraphicsPanel from './DevGraphicsPanel';
+import { useDevGraphicsFlags } from './devGraphicsFlags';
 import { getMinCrossingsForLevel } from './difficulty';
+import { ENDPOINT_ACCENT } from './palette';
+import ParallaxBackground from './ParallaxBackground';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { ENDPOINT_ACCENT } from './palette';
 import {
   countCrossings,
   createCrossingTracker,
@@ -34,6 +36,7 @@ import {
 } from './puzzle';
 import { BADGE_ZOOM_TIGHTNESS, clampTranslate, getBadgeCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
+import { useDeviceTilt } from './useDeviceTilt';
 
 const NODE_RADIUS = 5;
 const HIT_RADIUS_SCREEN = 32;
@@ -450,8 +453,19 @@ function BadgeGame({
 
   const solved = crossings === 0;
 
+  const devFlags = useDevGraphicsFlags();
+  const tilt = useDeviceTilt(devFlags.parallax);
+
   return (
     <View style={styles.container}>
+      {devFlags.parallax && (
+        <ParallaxBackground
+          width={width}
+          height={height}
+          tilt={tilt}
+          colors={[COLORS.node, COLORS.endpoint, COLORS.ropeSolved]}
+        />
+      )}
       <GestureDetector gesture={cameraGesture}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>

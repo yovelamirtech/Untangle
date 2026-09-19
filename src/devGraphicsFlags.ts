@@ -11,12 +11,14 @@ export interface DevGraphicsFlags {
   nodeGradient: boolean;
   nodeShadow: boolean;
   edgeGlow: boolean;
+  parallax: boolean;
 }
 
 const flags: DevGraphicsFlags = {
   nodeGradient: true,
   nodeShadow: true,
   edgeGlow: true,
+  parallax: true,
 };
 
 const listeners = new Set<() => void>();
