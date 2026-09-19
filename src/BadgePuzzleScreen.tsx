@@ -18,10 +18,8 @@ import Animated, {
 import { getBadge, getBadgeNodeCount, getBadgeSolvedGraph } from './badges';
 import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './badgeProgress';
 import DevGraphicsPanel from './DevGraphicsPanel';
-import { useDevGraphicsFlags } from './devGraphicsFlags';
 import { getMinCrossingsForLevel } from './difficulty';
 import { ENDPOINT_ACCENT } from './palette';
-import ParallaxBackground from './ParallaxBackground';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import {
@@ -36,7 +34,6 @@ import {
 } from './puzzle';
 import { BADGE_ZOOM_TIGHTNESS, clampTranslate, getBadgeCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
-import { useDeviceTilt } from './useDeviceTilt';
 
 const NODE_RADIUS = 5;
 const HIT_RADIUS_SCREEN = 32;
@@ -453,19 +450,12 @@ function BadgeGame({
 
   const solved = crossings === 0;
 
-  const devFlags = useDevGraphicsFlags();
-  const tilt = useDeviceTilt(devFlags.parallax);
-
   return (
     <View style={styles.container}>
-      {devFlags.parallax && (
-        <ParallaxBackground
-          width={width}
-          height={height}
-          tilt={tilt}
-          colors={[COLORS.node, COLORS.endpoint, COLORS.ropeSolved]}
-        />
-      )}
+      {/* No ParallaxBackground here (unlike PuzzleScreen) — its blurred,
+       * tilt-driven layers add real GPU draw cost on top of an already
+       * much heavier canvas (hundreds of nodes/edges), for a background
+       * effect that's easy to miss while actively dragging/zooming. */}
       <GestureDetector gesture={cameraGesture}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>
@@ -488,6 +478,11 @@ function BadgeGame({
             })}
             {graph.nodes.map((node) => {
               const nv = nodeValueById(node.id);
+              // Only the (few) endpoint nodes get the shadow/gradient here —
+              // a badge can have hundreds of regular nodes, where the extra
+              // per-node image filter (shadow) or per-frame derived highlight
+              // recompute (gradient) isn't worth the draw cost.
+              const isSpecialNode = !solved && endpointIds.has(node.id);
               return (
                 <PuzzleNode
                   key={node.id}
@@ -497,10 +492,8 @@ function BadgeGame({
                   nodeY={nv.y}
                   pulse={pulse}
                   scale={scale}
-                  // Only the (few) endpoint nodes get the shadow here — a
-                  // badge can have hundreds of regular nodes, where the
-                  // extra per-node image filter isn't worth the draw cost.
-                  withShadow={!solved && endpointIds.has(node.id)}
+                  withShadow={isSpecialNode}
+                  withGradient={isSpecialNode}
                 />
               );
             })}

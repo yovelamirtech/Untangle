@@ -15,6 +15,12 @@ interface Props {
    * Challenge, whose puzzles can have hundreds of nodes — an extra image
    * filter per node there isn't worth the draw cost. */
   withShadow?: boolean;
+  /** Adds the glossy radial-gradient fill. Defaults on (unchanged behavior
+   * for normal levels' small node counts) — Badge Challenge passes this
+   * false for most of its nodes for the same per-node draw-cost reason as
+   * withShadow, since a gradient recomputes its own derived highlight
+   * position/radius every frame on top of the fill itself. */
+  withGradient?: boolean;
 }
 
 function lighten(hex: string, amount: number): string {
@@ -39,11 +45,11 @@ function darken(hex: string, amount: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, scale, withShadow = false }: Props) {
+function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, scale, withShadow = false, withGradient = true }: Props) {
   // __DEV__-only overrides for testing the effects on/off on a real device;
   // both default to on and are irrelevant outside the dev panel.
   const devFlags = useDevGraphicsFlags();
-  const showGradient = devFlags.nodeGradient;
+  const showGradient = withGradient && devFlags.nodeGradient;
   const showShadow = withShadow && devFlags.nodeShadow;
 
   // Keep dots readable at any zoom level: grow their canvas-space radius as
