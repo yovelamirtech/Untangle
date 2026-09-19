@@ -15,6 +15,7 @@ import {
 
 import { showInterstitialIfReady } from './ads';
 import { getDifficultyForLevel, getMinCrossingsForLevel } from './difficulty';
+import DevGraphicsPanel from './DevGraphicsPanel';
 import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
@@ -146,6 +147,7 @@ function PuzzleGame({
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
   const [levelPickerVisible, setLevelPickerVisible] = useState(false);
   const [levelInput, setLevelInput] = useState('');
+  const [devFxPanelVisible, setDevFxPanelVisible] = useState(false);
 
   useEffect(() => {
     onLevelChange(level);
@@ -471,6 +473,11 @@ function PuzzleGame({
               <Text style={styles.fitButtonText}>Test: Solve</Text>
             </Pressable>
           )}
+          {__DEV__ && (
+            <Pressable style={styles.fitButton} onPress={() => setDevFxPanelVisible(true)}>
+              <Text style={styles.fitButtonText}>FX</Text>
+            </Pressable>
+          )}
           <Pressable style={styles.fitButton} onPress={onOpenJourney}>
             <Text style={styles.fitButtonText}>Journey</Text>
           </Pressable>
@@ -541,6 +548,9 @@ function PuzzleGame({
             </Pressable>
           </Pressable>
         </Modal>
+
+      {/* DEV-ONLY: A/B the graphics-polish effects on a real device. Strip before release. */}
+      {__DEV__ && <DevGraphicsPanel visible={devFxPanelVisible} onClose={() => setDevFxPanelVisible(false)} />}
     </View>
   );
 }

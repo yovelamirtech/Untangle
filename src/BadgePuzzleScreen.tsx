@@ -17,6 +17,7 @@ import Animated, {
 
 import { getBadge, getBadgeNodeCount, getBadgeSolvedGraph } from './badges';
 import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './badgeProgress';
+import DevGraphicsPanel from './DevGraphicsPanel';
 import { getMinCrossingsForLevel } from './difficulty';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
@@ -268,6 +269,7 @@ function BadgeGame({
   const pulse = useSharedValue(0);
   const burst = useSharedValue(0);
   const [celebrating, setCelebrating] = useState(false);
+  const [devFxPanelVisible, setDevFxPanelVisible] = useState(false);
   const crossingsRef = useRef(crossings);
   const solvedRef = useRef(crossings === 0);
   // Lazily initialized (not `useRef(createCrossingTracker(graph))`, which
@@ -516,8 +518,16 @@ function BadgeGame({
           <Pressable style={styles.pillButton} onPress={resetCamera}>
             <Text style={styles.pillButtonText}>Fit</Text>
           </Pressable>
+          {__DEV__ && (
+            <Pressable style={styles.pillButton} onPress={() => setDevFxPanelVisible(true)}>
+              <Text style={styles.pillButtonText}>FX</Text>
+            </Pressable>
+          )}
         </View>
       </View>
+
+      {/* DEV-ONLY: A/B the graphics-polish effects on a real device. Strip before release. */}
+      {__DEV__ && <DevGraphicsPanel visible={devFxPanelVisible} onClose={() => setDevFxPanelVisible(false)} />}
     </View>
   );
 }

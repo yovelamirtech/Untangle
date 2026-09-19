@@ -2,6 +2,8 @@ import { memo } from 'react';
 import { Circle, RadialGradient, Shadow, vec } from '@shopify/react-native-skia';
 import { SharedValue, useDerivedValue } from 'react-native-reanimated';
 
+import { useDevGraphicsFlags } from './devGraphicsFlags';
+
 interface Props {
   radius: number;
   fill: string;
@@ -38,6 +40,12 @@ function darken(hex: string, amount: number): string {
 }
 
 function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, scale, withShadow = false }: Props) {
+  // __DEV__-only overrides for testing the effects on/off on a real device;
+  // both default to on and are irrelevant outside the dev panel.
+  const devFlags = useDevGraphicsFlags();
+  const showGradient = devFlags.nodeGradient;
+  const showShadow = withShadow && devFlags.nodeShadow;
+
   // Keep dots readable at any zoom level: grow their canvas-space radius as
   // the camera zooms out, capped so they don't balloon at extreme zoom-out.
   // Recomputed live every frame — cheap here since Skia batches the whole
@@ -61,9 +69,11 @@ function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, scale, withShadow = fal
   const shade = darken(fill, 0.32);
 
   return (
-    <Circle cx={nodeX} cy={nodeY} r={r}>
-      <RadialGradient c={highlightCenter} r={gradientRadius} colors={[highlight, fill, shade]} positions={[0, 0.5, 1]} />
-      {withShadow && (
+    <Circle cx={nodeX} cy={nodeY} r={r} color={showGradient ? undefined : fill}>
+      {showGradient && (
+        <RadialGradient c={highlightCenter} r={gradientRadius} colors={[highlight, fill, shade]} positions={[0, 0.5, 1]} />
+      )}
+      {showShadow && (
         <>
           {/* Soft, wide ambient shadow for a "lifted off the board" sense of height... */}
           <Shadow dx={0} dy={3} blur={5} color="rgba(0,0,0,0.16)" />
