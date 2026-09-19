@@ -349,3 +349,80 @@ export function countCrossings(graph: Graph): number {
   }
   return count;
 }
+
+/**
+ * Incremental alternative to countCrossings(), for use while dragging.
+ *
+ * A drag only ever moves one node at a time, so only the crossing status of
+ * edge pairs touching that node can possibly have changed — every other
+ * pair's crossing/not-crossing state is exactly what it was after the last
+ * update. updateCrossingTracker() only re-checks the O(degree * E) pairs
+ * that touch the moved node instead of all O(E^2) pairs, which is what
+ * makes badges with a few hundred edges (toaster, rtx5090) stay smooth
+ * while dragging instead of recomputing everything on every frame.
+ */
+export interface CrossingTracker {
+  edges: Edge[];
+  positions: Map<number, Point>;
+  edgesByNode: Map<number, number[]>;
+  pairCrossing: Map<string, boolean>;
+  count: number;
+}
+
+export function createCrossingTracker(graph: Graph): CrossingTracker {
+  const { nodes, edges } = graph;
+  const positions = new Map<number, Point>(nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
+  const edgesByNode = new Map<number, number[]>();
+  edges.forEach((edge, index) => {
+    for (const nodeId of [edge.a, edge.b]) {
+      const list = edgesByNode.get(nodeId);
+      if (list) list.push(index);
+      else edgesByNode.set(nodeId, [index]);
+    }
+  });
+
+  const tracker: CrossingTracker = { edges, positions, edgesByNode, pairCrossing: new Map(), count: 0 };
+  for (let i = 0; i < edges.length; i++) {
+    for (let j = i + 1; j < edges.length; j++) {
+      if (edgesShareEndpoint(edges[i], edges[j])) continue;
+      const crossing = segmentsIntersect(
+        positions.get(edges[i].a)!,
+        positions.get(edges[i].b)!,
+        positions.get(edges[j].a)!,
+        positions.get(edges[j].b)!
+      );
+      tracker.pairCrossing.set(`${i}:${j}`, crossing);
+      if (crossing) tracker.count++;
+    }
+  }
+  return tracker;
+}
+
+/**
+ * Moves `nodeId` to (x, y) and updates the tracker's crossing count to
+ * match. Returns the new total crossing count.
+ */
+export function updateCrossingTracker(tracker: CrossingTracker, nodeId: number, x: number, y: number): number {
+  tracker.positions.set(nodeId, { x, y });
+  const touchedEdges = tracker.edgesByNode.get(nodeId);
+  if (!touchedEdges) return tracker.count;
+
+  const { edges, positions, pairCrossing } = tracker;
+  for (const i of touchedEdges) {
+    for (let j = 0; j < edges.length; j++) {
+      if (j === i || edgesShareEndpoint(edges[i], edges[j])) continue;
+      const key = i < j ? `${i}:${j}` : `${j}:${i}`;
+      const crossing = segmentsIntersect(
+        positions.get(edges[i].a)!,
+        positions.get(edges[i].b)!,
+        positions.get(edges[j].a)!,
+        positions.get(edges[j].b)!
+      );
+      if (pairCrossing.get(key) !== crossing) {
+        pairCrossing.set(key, crossing);
+        tracker.count += crossing ? 1 : -1;
+      }
+    }
+  }
+  return tracker.count;
+}

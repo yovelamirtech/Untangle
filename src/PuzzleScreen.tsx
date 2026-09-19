@@ -18,7 +18,16 @@ import { getDifficultyForLevel, getMinCrossingsForLevel } from './difficulty';
 import { getPaletteForLevel } from './palette';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { countCrossings, generateSolvedGraph, getEndpointIds, Graph, scrambleGraphAtLeast } from './puzzle';
+import {
+  countCrossings,
+  createCrossingTracker,
+  CrossingTracker,
+  generateSolvedGraph,
+  getEndpointIds,
+  Graph,
+  scrambleGraphAtLeast,
+  updateCrossingTracker,
+} from './puzzle';
 import { clampTranslate, getCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
@@ -155,6 +164,12 @@ function PuzzleGame({
   const pulse = useSharedValue(0);
   const crossingsRef = useRef(crossings);
   const graphRef = useRef(graph);
+  // Lazily initialized (not `useRef(createCrossingTracker(graph))`, which
+  // would rebuild it — an O(E^2) pass — on every render).
+  const crossingTrackerRef = useRef<CrossingTracker | null>(null);
+  if (crossingTrackerRef.current === null) {
+    crossingTrackerRef.current = createCrossingTracker(graph);
+  }
 
   const initialCamera = getFitCamera(canvasSize, width, height, getInitialFocusSize(canvasSize, width, height));
   const scale = useSharedValue(initialCamera.scale);
@@ -197,9 +212,10 @@ function PuzzleGame({
       setCanvasSize(nextCanvasSize);
       setGraph(nextGraph);
       graphRef.current = nextGraph;
-      const nextCrossings = countCrossings(nextGraph);
-      setCrossings(nextCrossings);
-      crossingsRef.current = nextCrossings;
+      const nextTracker = createCrossingTracker(nextGraph);
+      crossingTrackerRef.current = nextTracker;
+      setCrossings(nextTracker.count);
+      crossingsRef.current = nextTracker.count;
       pulse.value = 0;
 
       scale.value = nextCamera.scale;
@@ -248,17 +264,23 @@ function PuzzleGame({
     setTimeout(handleSolved, ADVANCE_DELAY_MS);
   }, [handleSolved, pulse]);
 
-  const recomputeCrossings = useCallback(() => {
-    const currentNodes = nodeValues.map((n) => ({ id: n.id, x: n.x.value, y: n.y.value }));
-    const newCrossings = countCrossings({ nodes: currentNodes, edges: graphRef.current.edges });
-    const wasSolved = crossingsRef.current === 0;
-    crossingsRef.current = newCrossings;
-    setCrossings(newCrossings);
+  // Only the dragged node's position actually changed since the last call,
+  // so the tracker only re-checks the edge pairs touching it instead of
+  // recounting every pair in the graph (see updateCrossingTracker).
+  const recomputeCrossings = useCallback(
+    (movedNodeId: number) => {
+      const node = nodeValueById(movedNodeId);
+      const newCrossings = updateCrossingTracker(crossingTrackerRef.current!, movedNodeId, node.x.value, node.y.value);
+      const wasSolved = crossingsRef.current === 0;
+      crossingsRef.current = newCrossings;
+      setCrossings(newCrossings);
 
-    if (newCrossings === 0 && !wasSolved) {
-      triggerSolvedFeedback();
-    }
-  }, [nodeValues, triggerSolvedFeedback]);
+      if (newCrossings === 0 && !wasSolved) {
+        triggerSolvedFeedback();
+      }
+    },
+    [nodeValueById, triggerSolvedFeedback]
+  );
 
   // Dev-only: skips straight to the solve feedback/flow without needing to
   // actually untangle the level, for testing. Never shown in production
@@ -318,7 +340,7 @@ function PuzzleGame({
         }
         dragUpdateCount.value += 1;
         if (dragUpdateCount.value % DRAG_THROTTLE_UPDATES === 0) {
-          runOnJS(recomputeCrossings)();
+          runOnJS(recomputeCrossings)(draggedNodeId.value);
         }
       } else {
         translateX.value = clampTranslate(translateX.value + dxScreen, scale.value, canvasSize, width);
@@ -327,7 +349,7 @@ function PuzzleGame({
     })
     .onEnd(() => {
       if (draggedNodeId.value !== -1) {
-        runOnJS(recomputeCrossings)();
+        runOnJS(recomputeCrossings)(draggedNodeId.value);
       }
       draggedNodeId.value = -1;
     });

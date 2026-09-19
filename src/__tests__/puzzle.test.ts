@@ -1,11 +1,13 @@
 import {
   countCrossings,
+  createCrossingTracker,
   generateSolvedGraph,
   getEndpointIds,
   Graph,
   scrambleGraph,
   scrambleGraphAtLeast,
   traceOuterBoundaryIds,
+  updateCrossingTracker,
 } from '../puzzle';
 
 describe('generateSolvedGraph', () => {
@@ -100,6 +102,52 @@ describe('countCrossings', () => {
       ],
     };
     expect(countCrossings(graph)).toBe(1);
+  });
+});
+
+describe('createCrossingTracker / updateCrossingTracker', () => {
+  it('matches countCrossings on creation', () => {
+    const solved = generateSolvedGraph(10, { x: 200, y: 200 }, 150);
+    const scrambled = scrambleGraph(solved, 400, 400, 20);
+    const tracker = createCrossingTracker(scrambled);
+    expect(tracker.count).toBe(countCrossings(scrambled));
+  });
+
+  it('stays in sync with countCrossings after moving a single node', () => {
+    const solved = generateSolvedGraph(10, { x: 200, y: 200 }, 150);
+    const scrambled = scrambleGraph(solved, 400, 400, 20);
+    const tracker = createCrossingTracker(scrambled);
+
+    const moved = scrambled.nodes[3];
+    const newX = moved.x + 137;
+    const newY = moved.y - 82;
+    const trackerCount = updateCrossingTracker(tracker, moved.id, newX, newY);
+
+    const nextGraph: Graph = {
+      nodes: scrambled.nodes.map((n) => (n.id === moved.id ? { ...n, x: newX, y: newY } : n)),
+      edges: scrambled.edges,
+    };
+    expect(trackerCount).toBe(countCrossings(nextGraph));
+  });
+
+  it('stays in sync across a sequence of moves to different nodes', () => {
+    const solved = generateSolvedGraph(12, { x: 200, y: 200 }, 150);
+    let graph = scrambleGraph(solved, 400, 400, 20);
+    const tracker = createCrossingTracker(graph);
+
+    const moves = [
+      { id: graph.nodes[0].id, x: 50, y: 300 },
+      { id: graph.nodes[5].id, x: 350, y: 40 },
+      { id: graph.nodes[0].id, x: 200, y: 200 },
+      { id: graph.nodes[9].id, x: 10, y: 10 },
+    ];
+
+    let trackerCount = tracker.count;
+    for (const move of moves) {
+      trackerCount = updateCrossingTracker(tracker, move.id, move.x, move.y);
+      graph = { nodes: graph.nodes.map((n) => (n.id === move.id ? { ...n, x: move.x, y: move.y } : n)), edges: graph.edges };
+      expect(trackerCount).toBe(countCrossings(graph));
+    }
   });
 });
 
