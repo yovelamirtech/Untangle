@@ -15,6 +15,12 @@ interface Props {
    * Challenge, whose puzzles can have hundreds of nodes — an extra image
    * filter per node there isn't worth the draw cost. */
   withShadow?: boolean;
+  /** Adds the glossy radial-gradient fill. Defaults on (unchanged behavior
+   * for normal levels' small node counts) — Badge Challenge passes this
+   * false for most of its nodes for the same per-node draw-cost reason as
+   * withShadow, since a gradient recomputes its own derived highlight
+   * position/radius every frame on top of the fill itself. */
+  withGradient?: boolean;
 }
 
 function lighten(hex: string, amount: number): string {
@@ -39,20 +45,31 @@ function darken(hex: string, amount: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, scale, withShadow = false }: Props) {
+function PuzzleNode({ radius, fill, nodeX, nodeY, pulse, scale, withShadow = false, withGradient = true }: Props) {
   // __DEV__-only overrides for testing the effects on/off on a real device;
   // both default to on and are irrelevant outside the dev panel.
   const devFlags = useDevGraphicsFlags();
-  const showGradient = devFlags.nodeGradient;
+  const showGradient = withGradient && devFlags.nodeGradient;
   const showShadow = withShadow && devFlags.nodeShadow;
 
   // Keep dots readable at any zoom level: grow their canvas-space radius as
-  // the camera zooms out, capped so they don't balloon at extreme zoom-out.
+  // the camera zooms out, capped at both ends so they don't balloon at
+  // extreme zoom-out *or* extreme zoom-in. This draws inside a Group scaled
+  // by `scale`, so the actual on-screen size is canvasRadius * scale — the
+  // zoom-in cap has to be expressed the same way as the zoom-out one
+  // (a screen-space budget divided by scale), or it silently stops doing
+  // anything once scale passes a certain point (a fixed canvas-space value
+  // only bounds the pre-scale number, not what lands on screen) and lets
+  // radius grow unbounded — worse the further zoomed in, and each node
+  // costs more to paint (more so for the shadow/gradient ones) with a
+  // bigger footprint.
   // Recomputed live every frame — cheap here since Skia batches the whole
   // scene into one GPU draw call instead of updating many native views.
   const r = useDerivedValue(() => {
     const desiredCanvasRadius = 7 / scale.value;
-    const screenRadius = Math.min(Math.max(radius, desiredCanvasRadius), radius * 4);
+    const zoomOutCeiling = radius * 4;
+    const zoomInCeiling = (radius * 4) / scale.value;
+    const screenRadius = Math.min(Math.max(radius, desiredCanvasRadius), zoomOutCeiling, zoomInCeiling);
     return screenRadius + pulse.value * 4;
   }, [radius, scale, pulse]);
 
