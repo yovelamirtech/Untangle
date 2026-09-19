@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Canvas, Circle, Group, Rect } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -17,10 +17,13 @@ import Animated, {
 
 import { getBadge, getBadgeNodeCount, getBadgeSolvedGraph } from './badges';
 import { getSavedNodePositions, saveBadgeInProgress, saveBadgeSolved } from './badgeProgress';
+import DevGraphicsPanel from './DevGraphicsPanel';
+import { useDevGraphicsFlags } from './devGraphicsFlags';
 import { getMinCrossingsForLevel } from './difficulty';
+import { ENDPOINT_ACCENT } from './palette';
+import ParallaxBackground from './ParallaxBackground';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
-import { ENDPOINT_ACCENT } from './palette';
 import {
   countCrossings,
   createCrossingTracker,
@@ -33,6 +36,7 @@ import {
 } from './puzzle';
 import { BADGE_ZOOM_TIGHTNESS, clampTranslate, getBadgeCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
+import { useDeviceTilt } from './useDeviceTilt';
 
 const NODE_RADIUS = 5;
 const HIT_RADIUS_SCREEN = 32;
@@ -268,6 +272,7 @@ function BadgeGame({
   const pulse = useSharedValue(0);
   const burst = useSharedValue(0);
   const [celebrating, setCelebrating] = useState(false);
+  const [devFxPanelVisible, setDevFxPanelVisible] = useState(false);
   const crossingsRef = useRef(crossings);
   const solvedRef = useRef(crossings === 0);
   // Lazily initialized (not `useRef(createCrossingTracker(graph))`, which
@@ -448,8 +453,19 @@ function BadgeGame({
 
   const solved = crossings === 0;
 
+  const devFlags = useDevGraphicsFlags();
+  const tilt = useDeviceTilt(devFlags.parallax);
+
   return (
     <View style={styles.container}>
+      {devFlags.parallax && (
+        <ParallaxBackground
+          width={width}
+          height={height}
+          tilt={tilt}
+          colors={[COLORS.node, COLORS.endpoint, COLORS.ropeSolved]}
+        />
+      )}
       <GestureDetector gesture={cameraGesture}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>
@@ -506,7 +522,12 @@ function BadgeGame({
             {solved ? `${badgeName} — Solved!` : `${badgeName} · ${crossings} crossing${crossings === 1 ? '' : 's'}`}
           </Text>
         </View>
-        <View style={styles.rightGroup}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.rightGroup}
+          contentContainerStyle={styles.rightGroupContent}
+        >
           {/* DEV-ONLY: skips straight to the solve flow, see celebrateSolve/forceSolve above. Strip before release. */}
           {__DEV__ && !solved && (
             <Pressable style={styles.pillButton} onPress={forceSolve}>
@@ -516,8 +537,16 @@ function BadgeGame({
           <Pressable style={styles.pillButton} onPress={resetCamera}>
             <Text style={styles.pillButtonText}>Fit</Text>
           </Pressable>
-        </View>
+          {__DEV__ && (
+            <Pressable style={styles.pillButton} onPress={() => setDevFxPanelVisible(true)}>
+              <Text style={styles.pillButtonText}>FX</Text>
+            </Pressable>
+          )}
+        </ScrollView>
       </View>
+
+      {/* DEV-ONLY: A/B the graphics-polish effects on a real device. Strip before release. */}
+      {__DEV__ && <DevGraphicsPanel visible={devFxPanelVisible} onClose={() => setDevFxPanelVisible(false)} />}
     </View>
   );
 }
@@ -558,7 +587,6 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingTop: 56,
     paddingHorizontal: 20,
   },
@@ -569,9 +597,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   rightGroup: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  rightGroupContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    justifyContent: 'flex-end',
+    paddingLeft: 8,
   },
   pillButton: {
     backgroundColor: COLORS.overlayBg,

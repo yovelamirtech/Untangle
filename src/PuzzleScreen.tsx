@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Canvas, Group, Rect } from '@shopify/react-native-skia';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   makeMutable,
@@ -15,7 +15,10 @@ import {
 
 import { showInterstitialIfReady } from './ads';
 import { getDifficultyForLevel, getMinCrossingsForLevel } from './difficulty';
+import DevGraphicsPanel from './DevGraphicsPanel';
+import { useDevGraphicsFlags } from './devGraphicsFlags';
 import { getPaletteForLevel } from './palette';
+import ParallaxBackground from './ParallaxBackground';
 import PuzzleEdge from './PuzzleEdge';
 import PuzzleNode from './PuzzleNode';
 import {
@@ -30,6 +33,7 @@ import {
 } from './puzzle';
 import { clampTranslate, getCanvasSize, getFitCamera, getInitialFocusSize } from './puzzleLayout';
 import { fireSolveHapticIfEnabled } from './SettingsScreen';
+import { useDeviceTilt } from './useDeviceTilt';
 import { getZoneIndexForLevel, LEVELS_PER_ZONE, ZONES } from './zones';
 
 /** Quick-jump targets for the level picker: level 1 plus both sides of every zone boundary. */
@@ -146,6 +150,7 @@ function PuzzleGame({
   const [crossings, setCrossings] = useState(() => countCrossings(graph));
   const [levelPickerVisible, setLevelPickerVisible] = useState(false);
   const [levelInput, setLevelInput] = useState('');
+  const [devFxPanelVisible, setDevFxPanelVisible] = useState(false);
 
   useEffect(() => {
     onLevelChange(level);
@@ -402,8 +407,14 @@ function PuzzleGame({
   const solved = crossings === 0;
   const palette = getPaletteForLevel(level);
 
+  const devFlags = useDevGraphicsFlags();
+  const tilt = useDeviceTilt(devFlags.parallax);
+
   return (
     <View style={[styles.container, { backgroundColor: palette.background }]}>
+      {devFlags.parallax && (
+        <ParallaxBackground width={width} height={height} tilt={tilt} colors={[palette.rope, palette.node, palette.endpoint]} />
+      )}
       <GestureDetector gesture={cameraGesture}>
         <Canvas style={StyleSheet.absoluteFill}>
           <Group transform={groupTransform}>
@@ -463,12 +474,22 @@ function PuzzleGame({
             {solved ? 'Solved!' : `${crossings} crossing${crossings === 1 ? '' : 's'}`}
           </Text>
         </View>
-        <View style={styles.buttonRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.buttonRow}
+          contentContainerStyle={styles.buttonRowContent}
+        >
           {/* DEV-ONLY block: skip-to-solved button and the level-jump picker
               below. Strip both before release. */}
           {__DEV__ && !solved && (
             <Pressable style={styles.fitButton} onPress={forceSolve}>
               <Text style={styles.fitButtonText}>Test: Solve</Text>
+            </Pressable>
+          )}
+          {__DEV__ && (
+            <Pressable style={styles.fitButton} onPress={() => setDevFxPanelVisible(true)}>
+              <Text style={styles.fitButtonText}>FX</Text>
             </Pressable>
           )}
           <Pressable style={styles.fitButton} onPress={onOpenJourney}>
@@ -488,7 +509,7 @@ function PuzzleGame({
               <Text style={styles.fitButtonText}>Lvl {level}</Text>
             </Pressable>
           )}
-        </View>
+        </ScrollView>
       </View>
 
       {/* DEV-ONLY: lets testing jump straight to any level. Strip before release. */}
@@ -541,6 +562,9 @@ function PuzzleGame({
             </Pressable>
           </Pressable>
         </Modal>
+
+      {/* DEV-ONLY: A/B the graphics-polish effects on a real device. Strip before release. */}
+      {__DEV__ && <DevGraphicsPanel visible={devFxPanelVisible} onClose={() => setDevFxPanelVisible(false)} />}
     </View>
   );
 }
@@ -558,7 +582,6 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingTop: 56,
     paddingHorizontal: 20,
   },
@@ -566,6 +589,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   settingsButton: {
     backgroundColor: COLORS.overlayBg,
@@ -586,8 +610,14 @@ const styles = StyleSheet.create({
     color: COLORS.subtitleSolved,
   },
   buttonRow: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  buttonRowContent: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    paddingLeft: 8,
   },
   fitButton: {
     backgroundColor: COLORS.overlayBg,
